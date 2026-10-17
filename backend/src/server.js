@@ -182,8 +182,15 @@ async function start() {
     const boot = await bootstrapAdmin();
     if (boot.created) {
       console.log(`Compte administrateur cree : ${boot.email}`);
-    } else if (boot.reason.startsWith('base vide')) {
-      console.warn(`Aucun compte administrateur — ${boot.reason}`);
+    } else if (boot.reason !== 'des comptes existent déjà') {
+      // Toute autre raison est un echec de configuration : il doit se voir
+      // dans les journaux, sinon la connexion echoue sans explication.
+      console.error(
+        '==================================================\n' +
+          `AUCUN COMPTE ADMINISTRATEUR CREE : ${boot.reason}.\n` +
+          'Corrigez la variable concernee, puis redeployez.\n' +
+          '=================================================='
+      );
     }
 
     // Carte de démonstration, si demandée et si la carte est vide.
