@@ -20,12 +20,21 @@ services:
     region: frankfurt
 
     # Compile l'interface, puis installe l'API sans ses outils de développement.
-    buildCommand: cd web && npm ci && npm run build && cd ../backend && npm ci --omit=dev
+    #
+    # `--include=dev` est indispensable : NODE_ENV vaut production ci-dessous,
+    # et npm saute alors les devDependencies — donc TypeScript, Vite et les
+    # types, sans lesquels la compilation échoue.
+    buildCommand: cd web && npm ci --include=dev && npm run build && cd ../backend && npm ci --omit=dev
     startCommand: node backend/src/server.js
 
     healthCheckPath: /health
 
     envVars:
+      # Version testée. Sans cela, Render prend sa version par défaut, qui
+      # change au fil du temps et peut casser un déploiement sans prévenir.
+      - key: NODE_VERSION
+        value: '22'
+
       - key: NODE_ENV
         value: production
 
