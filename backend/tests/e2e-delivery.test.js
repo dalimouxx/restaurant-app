@@ -1,0 +1,143 @@
+// Test de bout en bout : le parcours complet d'une commande en livraison,
+// du panier client jusqu'au versement de la commission au livreur.
+
+const { Client } = require('pg');
+require('dotenv').config({ path: __dirname + '/../.env' });
+const jwt = require('jsonwebtoken');
+
+const BASE = 'http://localhost:4000/api';
+let pass = 0, fail = 0;
+
+function check(cond, msg) {
+  if (cond) { pass++; console.log(`  OK   - ${msg}`); }
+  else { fail++; console.log(`  FAIL - ${msg}`); }
+}
+
+async function req(method, path, body, token) {
+  const res = await fetch(BASE + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) {}
+  return { status: res.status, data };
+}
+
+async function run() {
+  const db = new Client({ host: 'localhost', port: 5432, database: 'restaurant_db', user: 'postgres', password: 'postgres' });
+  await db.connect();
+
+  console.log('\n========== CYCLE DE VIE COMPLET D\'UNE LIVRAISON ==========\n');
+
+  // --- Preparation des acteurs ---
+  const admin = await req('POST', '/auth/login', { email: 'admin@restaurant.com', password: 'admin123' });
+  const adminToken = admin.data.token;
+
+  const cashier = await req('POST', '/auth/login-code', { loginCode: '1234' });
+  const cashierToken = cashier.data.token;
+
+  const manager = await req('POST', '/auth/login', { email: 'manager@restaurant.com', password: 'manager123' });
+  const managerToken = manager.data.token;
+
+  // Creation d'un livreur via l'API de gestion des employes
+  const suffix = Date.now().toString().slice(-6);
+  const driverRes = await req('POST', '/users', {
+    fullName: 'Livreur E2E', role: 'driver', phone: '60' + suffix,
+  }, adminToken);
+  check(driverRes.status === 201, 'Le manager peut creer un compte livreur');
+
+  const driverQr = driverRes.data.qrToken;
+  const driverLogin = await req('POST', '/auth/login-qr', { qrToken: driverQr });
+  check(driverLogin.status === 200 && driverLogin.data.user.role === 'driver',
+    'Le livreur se connecte en scannant son badge QR');
+  const driverToken = driverLogin.data.token;
+
+  // Client
+  const customer = await req('POST', '/auth/register-customer', {
+    fullName: 'Client E2E', phone: '61' + suffix,
+  });
+  const customerToken = customer.data.token;
+
+  // --- Etape 1 : le client commande avec livraison ---
+  const products = await req('GET', '/products');
+  const pizza = products.data.find((p) => p.name === 'Pizza Margherita');
+
+  const order = await req('POST', '/orders/online', {
+    items: [{ productId: pizza.id, quantity: 2 }],
+    fulfillmentType: 'delivery',
+    deliveryAddress: '5 Avenue Habib Bourguiba, Kairouan',
+    deliveryLat: 35.6781, deliveryLng: 10.0963,
+  }, customerToken);
+
+  check(order.status === 201, 'Le client passe une commande en livraison');
+  check(order.data.subtotal === 36, 'Sous-total correct (2 pizzas a 18 DT)');
+  check(order.data.deliveryFee === 7, 'Frais de livraison appliques');
+  check(order.data.totalAmount === 43, 'Total = 36 + 7 = 43 DT');
+  const orderId = order.data.id;
+  const orderQr = order.data.qrToken;
+
+  // --- Etape 2 : encaissement ---
+  const paid = await req('POST', `/orders/${orderId}/pay`, { paymentMethod: 'cash_on_delivery' }, cashierToken);
+  check(paid.status === 200 && paid.data.status === 'in_kitchen', 'Paiement enregistre, commande envoyee en cuisine');
+
+  // --- Etape 3 : la cuisine voit le ticket ---
+  const queue = await req('GET', '/orders/kitchen/queue', null, managerToken);
+  check(queue.data.some((o) => o.id === orderId), 'La commande apparait sur l\'ecran cuisine');
+
+  // --- Etape 4 : preparation puis pret ---
+  await req('POST', `/orders/${orderId}/kitchen-status`, { status: 'preparing' }, managerToken);
+  const ready = await req('POST', `/orders/${orderId}/kitchen-status`, { status: 'ready' }, managerToken);
+  check(ready.data.status === 'awaiting_driver',
+    'Une fois prete, la commande passe automatiquement en attente de livreur');
+
+  // --- Etape 5 : le livreur la voit et l'accepte ---
+  const available = await req('GET', '/delivery/available', null, driverToken);
+  check(available.data.some((o) => o.id === orderId), 'La livraison apparait chez le livreur');
+
+  const accepted = await req('POST', `/delivery/${orderId}/accept`, {}, driverToken);
+  check(accepted.status === 200 && accepted.data.status === 'out_for_delivery',
+    'Le livreur accepte, la commande passe en cours de livraison');
+
+  // --- Etape 6 : elle disparait pour les autres livreurs ---
+  const availableAfter = await req('GET', '/delivery/available', null, driverToken);
+  check(!availableAfter.data.some((o) => o.id === orderId),
+    'La commande disparait de la liste des livraisons disponibles');
+
+  // --- Etape 7 : mise a jour de la position ---
+  const loc = await req('POST', '/delivery/location', { lat: 35.6700, lng: 10.0900 }, driverToken);
+  check(loc.status === 200, 'Le livreur transmet sa position pour le suivi client');
+
+  // --- Etape 8 : le client ajoute un pourboire ---
+  const tipped = await req('POST', `/delivery/${orderId}/tip`, { tipAmount: 3 }, customerToken);
+  check(tipped.data.tipAmount === 3, 'Le client ajoute un pourboire de 3 DT');
+  check(tipped.data.totalAmount === 46, 'Le total est recalcule : 36 + 7 + 3 = 46 DT');
+
+  // --- Etape 9 : mauvais QR refuse ---
+  const badQr = await req('POST', `/delivery/${orderId}/confirm-delivery`, { qrToken: 'faux-token' }, driverToken);
+  check(badQr.status === 400, 'Un QR code invalide est refuse (securite)');
+
+  // --- Etape 10 : bon QR accepte ---
+  const confirmed = await req('POST', `/delivery/${orderId}/confirm-delivery`, { qrToken: orderQr }, driverToken);
+  check(confirmed.status === 200 && confirmed.data.status === 'delivered',
+    'Le scan du bon QR confirme la livraison');
+
+  // --- Etape 11 : commission du livreur ---
+  const stats = await req('GET', '/delivery/my-stats', null, driverToken);
+  const expectedEarning = 7 * 0.7 + 3; // 70% des frais + pourboire = 4.9 + 3 = 7.9
+  check(Math.abs(stats.data.totalDriverEarnings - expectedEarning) < 0.01,
+    `Commission correcte : 70% de 7 DT + 3 DT de pourboire = ${expectedEarning.toFixed(2)} DT (recu: ${stats.data.totalDriverEarnings.toFixed(2)})`);
+  check(stats.data.deliveriesCount === 1, 'Une livraison comptabilisee dans l\'historique');
+  check(Math.abs(stats.data.totalCollected - 46) < 0.01, 'Montant total encaisse par le livreur : 46 DT');
+
+  // --- Etape 12 : le client suit sa commande ---
+  const tracked = await req('GET', `/orders/${orderId}`, null, customerToken);
+  check(tracked.data.status === 'delivered', 'Le client voit sa commande comme livree');
+
+  console.log(`\n========== RESULTAT : ${pass} reussis, ${fail} echecs ==========\n`);
+
+  await db.end();
+  process.exit(fail > 0 ? 1 : 0);
+}
+
+run().catch((e) => { console.error('Erreur:', e); process.exit(1); });

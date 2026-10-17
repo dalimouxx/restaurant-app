@@ -1,0 +1,189 @@
+@import 'tailwindcss';
+
+/* ───────────────────────────────────────────────────────────
+   Système de design « Service »
+   Chassis graphite froid, vert pétrole comme unique couleur
+   d'action, statuts fonctionnels. Pensé pour être lu vite,
+   de loin, sous lumière forte.
+   ─────────────────────────────────────────────────────────── */
+
+@theme {
+  --font-sans: 'Figtree', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Chassis — gris froids, jamais crème */
+  --color-ink-950: #0a0d10;
+  --color-ink-900: #101418;
+  --color-ink-800: #1c232b;
+  --color-ink-700: #2a333d;
+  --color-ink-600: #3d4854;
+  --color-ink-500: #5a6672;
+  --color-ink-400: #8b96a1;
+  --color-ink-300: #b9c1c9;
+  --color-ink-200: #dfe4e9;
+  --color-ink-100: #eceff2;
+  --color-ink-50: #f2f4f6;
+
+  /* Action — vert pétrole */
+  --color-petrol-900: #063d34;
+  --color-petrol-800: #075043;
+  --color-petrol-700: #095a4c;
+  --color-petrol-600: #0b6b5b;
+  --color-petrol-500: #0f8873;
+  --color-petrol-400: #2aa891;
+  --color-petrol-200: #a7d9ce;
+  --color-petrol-100: #d6ece6;
+  --color-petrol-50: #e8f3f0;
+
+  /* Statuts */
+  --color-saffron-700: #8a5c05;
+  --color-saffron-600: #b57b0c;
+  --color-saffron-500: #e6a532;
+  --color-saffron-100: #fbeed2;
+  --color-saffron-50: #fdf7ea;
+
+  --color-coral-700: #9b2c2c;
+  --color-coral-600: #c13838;
+  --color-coral-500: #d64545;
+  --color-coral-100: #fadcdc;
+  --color-coral-50: #fdeeee;
+
+  --color-sky-700: #1e5a8a;
+  --color-sky-600: #2b7ab8;
+  --color-sky-500: #4a9bd8;
+  --color-sky-100: #d9ecf9;
+  --color-sky-50: #eef6fc;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 9px;
+  --radius-lg: 13px;
+  --radius-xl: 18px;
+}
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-ink-50);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    font-synthesis-weight: none;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Les montants et numéros s'alignent en colonne : chasse fixe */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  /* Chiffres alignés même en Figtree */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-petrol-500);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  button {
+    font-family: inherit;
+  }
+
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+    font-size: 100%;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-300);
+    border-radius: 99px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-ink-400);
+    background-clip: content-box;
+  }
+
+  .dark-surface ::-webkit-scrollbar-thumb {
+    background: var(--color-ink-600);
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Entrée d'un nouveau ticket : un seul mouvement, pour signaler
+     qu'une commande vient d'arriver. */
+  @keyframes ticket-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .animate-ticket-in {
+    animation: ticket-in 220ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  }
+
+  @keyframes pulse-ring {
+    0% {
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-saffron-500) 55%, transparent);
+    }
+    70% {
+      box-shadow: 0 0 0 10px transparent;
+    }
+    100% {
+      box-shadow: 0 0 0 0 transparent;
+    }
+  }
+  .animate-pulse-ring {
+    animation: pulse-ring 1.8s ease-out infinite;
+  }
+
+  @keyframes sweep {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+  .animate-sweep {
+    animation: sweep 1.4s ease-in-out infinite;
+  }
+}

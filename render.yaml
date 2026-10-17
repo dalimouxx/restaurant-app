@@ -1,0 +1,68 @@
+# Blueprint Render — déploie l'API, l'application web et la base en une fois.
+#
+# Dans Render : New → Blueprint → sélectionnez ce dépôt.
+# Deux valeurs vous seront demandées : ADMIN_EMAIL et ADMIN_PASSWORD.
+#
+# Région : Frankfurt, la plus proche de la Tunisie.
+#
+# ⚠️ Plan gratuit — à connaître avant la mise en service réelle :
+#   · la base est supprimée 30 jours après sa création ;
+#   · le service s'endort après 15 min sans trafic (réveil ~1 min), ce qui
+#     coupe les WebSockets : l'écran cuisine cesse de recevoir les tickets.
+# Pour un usage en production, passez les deux `plan: free` en `starter`.
+
+services:
+  - type: web
+    name: service-restaurant
+    runtime: node
+    plan: free
+    region: frankfurt
+
+    # Compile l'interface, puis installe l'API sans ses outils de développement.
+    buildCommand: cd web && npm ci && npm run build && cd ../backend && npm ci --omit=dev
+    startCommand: node backend/src/server.js
+
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Généré par Render, jamais visible dans le dépôt.
+      - key: JWT_SECRET
+        generateValue: true
+
+      - key: JWT_EXPIRES_IN
+        value: 12h
+
+      # Branchement automatique sur la base déclarée plus bas.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: restaurant-db
+          property: connectionString
+
+      # Premier administrateur, créé uniquement si la base est vide.
+      # `sync: false` = Render vous les demande au déploiement et ne les
+      # stocke pas dans le dépôt.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_NAME
+        value: Administrateur
+
+      - key: DRIVER_COMMISSION_PERCENT
+        value: '70'
+
+      # Crée une carte de démonstration (3 catégories, 5 produits,
+      # 7 ingrédients) au tout premier démarrage, pour pouvoir tester
+      # immédiatement. Passez à 'false' avant la mise en service réelle.
+      - key: SEED_DEMO
+        value: 'true'
+
+databases:
+  - name: restaurant-db
+    plan: free
+    region: frankfurt
+    databaseName: restaurant
+    user: restaurant
