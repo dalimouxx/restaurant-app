@@ -1,15 +1,16 @@
-# Blueprint Render — déploie l'API, l'application web et la base en une fois.
+# Blueprint Render — service web uniquement.
+# La base PostgreSQL est hébergée chez Neon (voir DEPLOIEMENT-RENDER.md).
 #
 # Dans Render : New → Blueprint → sélectionnez ce dépôt.
-# Deux valeurs vous seront demandées : ADMIN_EMAIL et ADMIN_PASSWORD.
+# Trois valeurs vous seront demandées : DATABASE_URL, ADMIN_EMAIL,
+# ADMIN_PASSWORD.
 #
-# Région : Frankfurt, la plus proche de la Tunisie.
+# Région : Frankfurt, la plus proche de la Tunisie. Choisissez la même
+# région chez Neon pour limiter la latence entre le service et la base.
 #
-# ⚠️ Plan gratuit — à connaître avant la mise en service réelle :
-#   · la base est supprimée 30 jours après sa création ;
-#   · le service s'endort après 15 min sans trafic (réveil ~1 min), ce qui
-#     coupe les WebSockets : l'écran cuisine cesse de recevoir les tickets.
-# Pour un usage en production, passez les deux `plan: free` en `starter`.
+# ⚠️ Plan gratuit Render : le service s'endort après 15 min sans trafic
+# (réveil ~1 min), ce qui coupe les WebSockets — l'écran cuisine cesse de
+# recevoir les tickets. Pour un usage réel, passez `plan: free` en `starter`.
 
 services:
   - type: web
@@ -35,15 +36,15 @@ services:
       - key: JWT_EXPIRES_IN
         value: 12h
 
-      # Branchement automatique sur la base déclarée plus bas.
+      # Chaîne de connexion Neon — collez-la au déploiement.
+      # Prenez la version SANS « -pooler » dans le nom d'hôte : le serveur
+      # garde ses propres connexions ouvertes, le pooler de Neon est destiné
+      # aux fonctions serverless.
       - key: DATABASE_URL
-        fromDatabase:
-          name: restaurant-db
-          property: connectionString
+        sync: false
 
       # Premier administrateur, créé uniquement si la base est vide.
-      # `sync: false` = Render vous les demande au déploiement et ne les
-      # stocke pas dans le dépôt.
+      # `sync: false` = Render vous les demande et ne les écrit pas au dépôt.
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD
@@ -59,10 +60,3 @@ services:
       # immédiatement. Passez à 'false' avant la mise en service réelle.
       - key: SEED_DEMO
         value: 'true'
-
-databases:
-  - name: restaurant-db
-    plan: free
-    region: frankfurt
-    databaseName: restaurant
-    user: restaurant

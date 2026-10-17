@@ -4,68 +4,77 @@ Durée : environ 20 minutes, dont 5 à 8 minutes de compilation.
 
 ---
 
-## Avant de commencer : ce que vous devez savoir
+## L'architecture retenue
 
-Le plan gratuit de Render convient **pour tester**, pas pour servir un vrai
-restaurant :
+| Brique | Hébergeur | Pourquoi |
+|---|---|---|
+| Application et API | Render | HTTPS automatique, déploiement depuis GitHub |
+| Base PostgreSQL | **Neon** | Les données ne sont pas supprimées au bout de 30 jours, contrairement à la base Render gratuite |
 
-| Contrainte du plan gratuit | Conséquence concrète |
+### Ce que le plan gratuit implique
+
+| Contrainte | Conséquence concrète |
 |---|---|
-| La base de données est **supprimée 30 jours** après sa création (14 jours de grâce pour migrer) | Toutes les données partent |
-| Le service **s'endort après 15 minutes** sans trafic, réveil en ~1 minute | L'écran cuisine cesse de recevoir les tickets ; la première visite est lente |
-| 1 Go de stockage, 750 heures d'instance par mois | Suffisant pour tester |
+| Render endort le service après **15 min** sans trafic, réveil ~1 min | L'écran cuisine cesse de recevoir les tickets ; la première visite est lente |
+| Neon suspend le calcul après **5 min** sans requête | La requête suivante réveille la base. Le code gère ce réveil : réessais automatiques et message « réessayez » plutôt qu'une panne |
+| Neon : 1 Go de stockage, **100 heures de calcul** par mois | Largement assez pour tester. Attention : tant qu'un écran reste ouvert, il interroge l'API toutes les 15 à 20 secondes, donc la base ne dort jamais et le quota s'épuise en continu |
+| Neon : les données ne sont **jamais supprimées** | C'est l'avantage décisif sur la base Render |
 
-Pour une mise en service réelle, passez les deux `plan: free` du fichier
-`render.yaml` en `starter`. C'est le seul changement nécessaire.
+Pour un usage réel : passez `plan: free` en `starter` dans `render.yaml`, et
+prenez un plan payant chez Neon.
 
-**Le bon côté :** Render fournit le HTTPS automatiquement. Le scan de QR code
-et la géolocalisation, bloqués par les navigateurs en HTTP, fonctionneront
+**Le bon côté :** Render fournit le HTTPS. Le scan de QR code et la
+géolocalisation, bloqués par les navigateurs en HTTP, fonctionnent donc
 immédiatement.
 
 ---
 
-## Étape 1 — Mettre le code sur GitHub
+## Étape 1 — Créer la base chez Neon
 
-Render déploie depuis un dépôt Git.
+1. Allez sur [neon.com](https://neon.com), créez un compte (connexion GitHub
+   possible).
+2. **New Project**.
+   - Nom : `restaurant`
+   - Région : **Europe (Frankfurt)** — la plus proche de la Tunisie, et la
+     même que le service Render
+   - Version de PostgreSQL : laissez celle proposée
+3. Neon affiche une chaîne de connexion. **Copiez-la**, elle ressemble à :
 
-```bash
-cd restaurant-app
-git init
-git add .
-git commit -m "Application web de gestion de restaurant"
-```
+   ```
+   postgresql://restaurant_owner:xxxxx@ep-cool-name-123456.eu-central-1.aws.neon.tech/restaurant?sslmode=require
+   ```
 
-Créez un dépôt **privé** sur GitHub, puis :
+   ⚠️ **Prenez la version sans `-pooler` dans le nom d'hôte.** Neon en
+   propose deux : celle avec `-pooler` est destinée aux fonctions
+   serverless, pas à un serveur Node qui garde ses connexions ouvertes.
+   Si vous ne voyez que la version « pooled », décochez l'option
+   *Connection pooling* au-dessus de la chaîne.
 
-```bash
-git remote add origin https://github.com/dalimouxx/restaurant-app.git
-git branch -M main
-git push -u origin main
-```
-
-Le fichier `.gitignore` exclut déjà `node_modules`, `dist` et `.env` :
-aucun mot de passe ne part sur GitHub.
+Gardez cette chaîne sous la main pour l'étape suivante.
 
 ---
 
 ## Étape 2 — Créer le Blueprint sur Render
 
+Le code est déjà sur GitHub : `dalimouxx/restaurant-app`.
+
 1. Allez sur [render.com](https://render.com) et connectez-vous avec GitHub.
 2. **New** → **Blueprint**.
-3. Sélectionnez le dépôt `restaurant-app`.
-4. Render lit `render.yaml` et propose de créer deux ressources :
-   - `service-restaurant` — l'application
-   - `restaurant-db` — la base PostgreSQL
+3. Sélectionnez le dépôt `restaurant-app`. Autorisez Render à y accéder s'il
+   le demande (le dépôt est privé).
+4. Render lit `render.yaml` et propose de créer le service
+   `service-restaurant`.
 
-5. Render demande deux valeurs. **Choisissez-les maintenant :**
+5. Render demande trois valeurs :
 
    | Variable | Quoi mettre |
    |---|---|
+   | `DATABASE_URL` | La chaîne Neon copiée à l'étape 1 |
    | `ADMIN_EMAIL` | Votre email de connexion, par exemple `mohamed@monrestaurant.tn` |
    | `ADMIN_PASSWORD` | Un mot de passe **d'au moins 10 caractères** |
 
-   Ce compte est créé au premier démarrage, uniquement si la base est vide.
-   Notez le mot de passe : il n'est affiché nulle part ensuite.
+   Le compte administrateur est créé au premier démarrage, uniquement si la
+   base est vide. Notez le mot de passe : il n'est affiché nulle part ensuite.
 
 6. **Apply**.
 
@@ -197,7 +206,11 @@ version au rafraîchissement — rien à réinstaller sur les appareils.
 |---|---|---|
 | Page blanche, erreur `JWT_SECRET manquant` dans les logs | Variable absente | Ajoutez-la dans **Environment** |
 | `Origine non autorisee` (403) | Un autre domaine appelle l'API | Ajoutez-le à `ALLOWED_ORIGINS`, séparé par des virgules |
-| Première visite très lente | Service endormi (plan gratuit) | Normal, ~1 minute. Disparaît en plan payant |
+| Première visite très lente | Service Render endormi | Normal, ~1 minute. Disparaît en plan payant |
+| « Base de données momentanément indisponible » (503) | Neon réveillait son calcul | Réessayez : la requête suivante passe. Le serveur ne tombe pas |
+| `Base injoignable (tentative 1/5)` au démarrage | Neon dormait pendant le déploiement | Normal : le serveur réessaie et démarre seul |
+| `password authentication failed` | Chaîne Neon incomplète ou expirée | Recopiez-la depuis le tableau de bord Neon |
+| Quota Neon épuisé en milieu de mois | Les écrans ouverts interrogent l'API en continu, la base ne dort jamais | Fermez les écrans inutilisés, ou passez à un plan payant |
 | La caméra ne s'ouvre pas | Navigateur sans l'API de lecture de code | Utilisez Chrome ou Edge ; la saisie manuelle du code reste possible |
 | La cuisine ne reçoit plus rien | Service endormi, WebSocket coupé | Rafraîchissez. L'indicateur rouge « Hors ligne » le signale |
 | Échec de compilation | Lockfile absent | Vérifiez que `package-lock.json` est bien poussé sur GitHub |
@@ -218,3 +231,14 @@ Avant livraison, l'ensemble a été exécuté dans les conditions de Render
   rechargement direct ;
 - **132 contrôles automatisés** : commandes, encaissement, stock, attribution
   d'une course à un seul livreur, commissions, cloisonnement des rôles.
+
+### Comportement face à une base suspendue (le cas Neon)
+
+Rejoué en coupant réellement la base en cours de service :
+
+| Moment | Résultat |
+|---|---|
+| Base coupée au démarrage | Le serveur réessaie (1 s, 2 s, 4 s, 8 s) et démarre dès qu'elle répond |
+| Requête pendant la suspension | **503** avec un message clair — auparavant, le processus Node mourait |
+| `/health` pendant la suspension | **200** : le service reste debout |
+| Après le réveil | **200** sans aucun redémarrage |

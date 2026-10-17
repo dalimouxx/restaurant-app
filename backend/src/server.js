@@ -1,4 +1,14 @@
 require('dotenv').config();
+
+/**
+ * Doit etre charge AVANT les routes. Express 4 n'attrape pas les erreurs
+ * levees dans un gestionnaire `async` : elles deviennent des rejets non
+ * geres et tuent le processus Node. Or une base serverless (Neon) suspend
+ * son calcul apres quelques minutes : la requete qui la reveille peut
+ * echouer. Sans ce relais, le service tomberait plusieurs fois par jour.
+ */
+require('express-async-errors');
+
 const express = require('express');
 const cors = require('cors');
 const http = require('http');
@@ -92,11 +102,30 @@ if (fs.existsSync(path.join(WEB_DIST, 'index.html'))) {
   );
 }
 
+/** Erreurs de connexion a la base : transitoires, pas la faute du client. */
+const DB_CONNECTION_ERRORS = [
+  'SequelizeConnectionError',
+  'SequelizeConnectionRefusedError',
+  'SequelizeHostNotFoundError',
+  'SequelizeConnectionTimedOutError',
+  'SequelizeAccessDeniedError',
+];
+
 // Gestion centralisee des erreurs
 app.use((err, req, res, next) => {
   if (err && err.message === 'Origine non autorisee') {
     return res.status(403).json({ error: "Origine non autorisee." });
   }
+
+  // La base dormait ou le reseau a coupe : 503 et non 500, pour que
+  // l'interface propose de reessayer au lieu d'annoncer une panne.
+  if (err && DB_CONNECTION_ERRORS.includes(err.name)) {
+    console.warn(`Base momentanement injoignable : ${err.message}`);
+    return res.status(503).json({
+      error: 'Base de donnees momentanement indisponible. Reessayez.',
+    });
+  }
+
   console.error(err);
   res.status(500).json({ error: err.message || 'Erreur serveur.' });
 });
@@ -117,9 +146,32 @@ if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   process.exit(1);
 }
 
+/**
+ * Premiere connexion, avec plusieurs tentatives.
+ * Une base serverless (Neon) est suspendue apres quelques minutes sans
+ * trafic : au demarrage elle peut mettre un instant a repondre. Abandonner
+ * des la premiere erreur ferait echouer le deploiement sans raison.
+ */
+async function connectWithRetry(attempts = 5) {
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      await sequelize.authenticate();
+      return;
+    } catch (err) {
+      if (i === attempts) throw err;
+      const waitMs = Math.min(1000 * 2 ** (i - 1), 8000);
+      console.warn(
+        `Base injoignable (tentative ${i}/${attempts}) : ${err.message}. ` +
+          `Nouvel essai dans ${waitMs / 1000} s.`
+      );
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+}
+
 async function start() {
   try {
-    await sequelize.authenticate();
+    await connectWithRetry();
     console.log('Connexion a la base de donnees reussie.');
 
     // Cree les tables manquantes. A remplacer par des migrations quand le
@@ -152,5 +204,18 @@ async function start() {
     process.exit(1);
   }
 }
+
+/**
+ * Dernier filet. Un service de restaurant tourne pendant le coup de feu :
+ * une erreur imprevue doit etre consignee, jamais couper les ecrans en
+ * pleine commande. Les cas rattrapables sont deja traites plus haut.
+ */
+process.on('unhandledRejection', (reason) => {
+  console.error('Rejet non gere (service maintenu) :', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Exception non geree (service maintenu) :', err);
+});
 
 start();
