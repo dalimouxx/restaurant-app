@@ -56,19 +56,55 @@ const common = {
   },
 };
 
+/**
+ * Retire les parametres TLS de la chaine de connexion.
+ *
+ * Les hebergeurs ajoutent `?sslmode=require&channel_binding=require` a
+ * l'URL qu'ils affichent. Or le pilote `pg` interprete `sslmode=require`
+ * comme `verify-full` (verification complete du certificat), ce qui entre
+ * en conflit avec la configuration TLS passee a cote et rend le
+ * comportement dependant de la version du pilote.
+ *
+ * On enleve donc ces parametres et on impose une seule configuration,
+ * explicite : la connexion se comporte pareil quelle que soit l'URL collee.
+ */
+function stripTlsParams(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    ['sslmode', 'channel_binding', 'ssl'].forEach((p) =>
+      u.searchParams.delete(p)
+    );
+    return u.toString();
+  } catch {
+    // URL non analysable : on la transmet telle quelle, l'erreur de
+    // connexion sera plus parlante qu'une erreur de parsing ici.
+    return rawUrl;
+  }
+}
+
 let sequelize;
 
 if (process.env.DATABASE_URL) {
-  // Une base locale ne parle pas TLS : on ne l'exige que pour un hôte distant.
-  const isLocal = /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL);
+  const url = stripTlsParams(process.env.DATABASE_URL);
+
+  // Une base locale ne parle pas TLS : on ne l'exige que pour un hote distant.
+  const isLocal = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
   const useSsl = process.env.DB_SSL === 'false' ? false : !isLocal;
 
-  sequelize = new Sequelize(process.env.DATABASE_URL, {
+  /**
+   * Verification du certificat. Desactivee par defaut car Render signe ses
+   * bases avec une autorite interne. Neon utilise des certificats publics :
+   * avec lui, DB_SSL_STRICT=true ajoute la verification complete.
+   * Dans les deux cas la connexion est chiffree.
+   */
+  const strict = process.env.DB_SSL_STRICT === 'true';
+
+  sequelize = new Sequelize(url, {
     ...common,
     dialectOptions: {
       ...common.dialectOptions,
       ...(useSsl
-        ? { ssl: { require: true, rejectUnauthorized: false } }
+        ? { ssl: { require: true, rejectUnauthorized: strict } }
         : {}),
     },
   });
