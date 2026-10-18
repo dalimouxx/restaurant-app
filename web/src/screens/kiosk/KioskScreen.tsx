@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Minus, Plus, ShoppingBag, Trash2, UtensilsCrossed } from 'lucide-react'
 import { catalog, orders } from '../../lib/api'
 import { on } from '../../lib/socket'
-import { useKioskCart } from '../../lib/store'
+import { lineUnitPrice, useKioskCart } from '../../lib/store'
 import { moneyDT, orderNo } from '../../lib/format'
 import type { Category, Product } from '../../lib/types'
 import { Button, EmptyState, Skeleton, useToast } from '../../components/ui'
 import { Wordmark } from '../../components/Shell'
+import { LineOptions, OptionPicker } from '../../components/OptionPicker'
 
 type Stage = 'ordering' | 'done'
 
@@ -19,6 +20,7 @@ export default function KioskScreen() {
   const [placedNumber, setPlacedNumber] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [mode, setMode] = useState<'dine_in' | 'pickup'>('dine_in')
+  const [picking, setPicking] = useState<Product | null>(null)
 
   const cart = useKioskCart()
   const { notify } = useToast()
@@ -126,7 +128,15 @@ export default function KioskScreen() {
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
               {visible.map((p) => (
-                <ProductTile key={p.id} product={p} onAdd={() => cart.add(p)} />
+                <ProductTile
+                  key={p.id}
+                  product={p}
+                  onAdd={() => {
+                    // Un plat sans variante part directement au panier.
+                    if ((p.options?.length ?? 0) === 0) cart.add(p)
+                    else setPicking(p)
+                  }}
+                />
               ))}
             </div>
           )}
@@ -163,8 +173,9 @@ export default function KioskScreen() {
                     <p className="truncate text-[14.5px] font-semibold text-ink-900">
                       {line.product.name}
                     </p>
+                    <LineOptions options={line.options} />
                     <p className="num mt-0.5 text-[13px] text-ink-500">
-                      {moneyDT(line.product.price)}
+                      {moneyDT(lineUnitPrice(line))}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 rounded-full border border-ink-200 p-0.5">
@@ -187,7 +198,7 @@ export default function KioskScreen() {
                     </button>
                   </div>
                   <span className="num w-[72px] shrink-0 text-right text-[14.5px] font-bold">
-                    {moneyDT(line.product.price * line.quantity)}
+                    {moneyDT(lineUnitPrice(line) * line.quantity)}
                   </span>
                 </li>
               ))}
@@ -236,6 +247,16 @@ export default function KioskScreen() {
           </div>
         )}
       </aside>
+
+      <OptionPicker
+        product={picking}
+        open={picking !== null}
+        onClose={() => setPicking(null)}
+        onConfirm={(options) => {
+          if (picking) cart.add(picking, options)
+          setPicking(null)
+        }}
+      />
     </div>
   )
 }

@@ -6,6 +6,7 @@ const {
   Product,
   Ingredient,
   ProductIngredient,
+  ProductOption,
 } = require('./models');
 
 /**
@@ -102,13 +103,41 @@ async function bootstrapDemoMenu() {
     quantityInStock: 100, alertThreshold: 20, costPerUnit: 0.4,
   });
 
-  async function addProduct(data, recipe) {
+  const oignon = await Ingredient.create({
+    name: 'Oignon', unit: 'kg',
+    quantityInStock: 10, alertThreshold: 2, costPerUnit: 2.5,
+  });
+  const olives = await Ingredient.create({
+    name: 'Olives', unit: 'kg',
+    quantityInStock: 6, alertThreshold: 1, costPerUnit: 9,
+  });
+  const harissa = await Ingredient.create({
+    name: 'Harissa', unit: 'kg',
+    quantityInStock: 4, alertThreshold: 1, costPerUnit: 7,
+  });
+
+  /**
+   * options : [{ kind, label, price, ingredient, qty }]
+   * Un retrait rend sa quantite au stock, un ajout la consomme.
+   */
+  async function addProduct(data, recipe, options = []) {
     const product = await Product.create(data);
     await ProductIngredient.bulkCreate(
       recipe.map((r) => ({
         productId: product.id,
         ingredientId: r.id,
         quantityNeeded: r.qty,
+      }))
+    );
+    await ProductOption.bulkCreate(
+      options.map((o, i) => ({
+        productId: product.id,
+        kind: o.kind,
+        label: o.label,
+        extraPrice: o.kind === 'remove' ? 0 : o.price || 0,
+        ingredientId: o.ingredient || null,
+        quantityDelta: o.qty || 0,
+        displayOrder: i,
       }))
     );
     return product;
@@ -125,6 +154,13 @@ async function bootstrapDemoMenu() {
       { id: pate.id, qty: 1 },
       { id: fromage.id, qty: 0.15 },
       { id: sauce.id, qty: 0.1 },
+    ],
+    [
+      { kind: 'remove', label: 'Basilic' },
+      { kind: 'remove', label: 'Sauce tomate', ingredient: sauce.id, qty: 0.1 },
+      { kind: 'add', label: 'Fromage', price: 2, ingredient: fromage.id, qty: 0.08 },
+      { kind: 'add', label: 'Olives', price: 1.5, ingredient: olives.id, qty: 0.04 },
+      { kind: 'add', label: 'Harissa', price: 0, ingredient: harissa.id, qty: 0.02 },
     ]
   );
 
@@ -140,6 +176,13 @@ async function bootstrapDemoMenu() {
       { id: fromage.id, qty: 0.15 },
       { id: sauce.id, qty: 0.1 },
       { id: thon.id, qty: 0.08 },
+    ],
+    [
+      { kind: 'remove', label: 'Olives', ingredient: olives.id, qty: 0.03 },
+      { kind: 'remove', label: 'Oignon', ingredient: oignon.id, qty: 0.03 },
+      { kind: 'add', label: 'Fromage', price: 2, ingredient: fromage.id, qty: 0.08 },
+      { kind: 'add', label: 'Thon', price: 3.5, ingredient: thon.id, qty: 0.05 },
+      { kind: 'add', label: 'Harissa', price: 0, ingredient: harissa.id, qty: 0.02 },
     ]
   );
 
@@ -153,6 +196,14 @@ async function bootstrapDemoMenu() {
     [
       { id: baguette.id, qty: 1 },
       { id: thon.id, qty: 0.1 },
+    ],
+    [
+      { kind: 'remove', label: 'Salade' },
+      { kind: 'remove', label: 'Oignon', ingredient: oignon.id, qty: 0.02 },
+      { kind: 'remove', label: 'Olives', ingredient: olives.id, qty: 0.02 },
+      { kind: 'add', label: 'Fromage', price: 1.5, ingredient: fromage.id, qty: 0.05 },
+      { kind: 'add', label: 'Harissa', price: 0, ingredient: harissa.id, qty: 0.02 },
+      { kind: 'add', label: 'Double thon', price: 3, ingredient: thon.id, qty: 0.1 },
     ]
   );
 
@@ -166,7 +217,7 @@ async function bootstrapDemoMenu() {
     [{ id: eau.id, qty: 1 }]
   );
 
-  return { created: true, products: 5, categories: 3, ingredients: 7 };
+  return { created: true, products: 5, categories: 3, ingredients: 10 };
 }
 
 module.exports = { bootstrapAdmin, bootstrapDemoMenu };

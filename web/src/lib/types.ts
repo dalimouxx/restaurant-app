@@ -38,6 +38,15 @@ export interface Category {
   displayOrder: number
 }
 
+/** Choix prédéfini d'un plat : rien n'est saisi à la main. */
+export interface ProductOption {
+  id: string
+  kind: 'remove' | 'add'
+  label: string
+  extraPrice: number
+  displayOrder?: number
+}
+
 export interface Product {
   id: string
   name: string
@@ -47,6 +56,7 @@ export interface Product {
   isAvailable: boolean
   categoryId: string
   Category?: Category
+  options?: ProductOption[]
 }
 
 export interface Ingredient {
@@ -60,14 +70,21 @@ export interface Ingredient {
   isLow?: boolean
 }
 
+/** Ce que la cuisine doit lire, figé au moment de la commande. */
+export interface ItemCustomization {
+  removed?: { id: string; label: string }[]
+  added?: { id: string; label: string; price: number }[]
+}
+
 export interface OrderItem {
   id: string
   orderId: string
   productId: string
   productNameSnapshot: string
+  /** Prix du plat, suppléments compris. */
   unitPrice: number
   quantity: number
-  customization: Record<string, unknown>
+  customization: ItemCustomization
 }
 
 export interface Order {
@@ -137,9 +154,10 @@ export interface DriverStats {
   }[]
 }
 
-/** Article du panier, côté client uniquement. */
+/** Article du panier, côté navigateur uniquement. */
 export interface CartLine {
   product: Product
   quantity: number
-  customization: Record<string, unknown>
+  /** Choix retenus. Le serveur recalcule prix et intitulés à partir d'eux. */
+  options: ProductOption[]
 }

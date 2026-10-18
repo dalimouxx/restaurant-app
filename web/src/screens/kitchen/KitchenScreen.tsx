@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Bike, ChefHat, Check, Smartphone, Store } from 'lucide-react'
+import {
+  Ban,
+  Bike,
+  ChefHat,
+  Check,
+  PlusCircle,
+  Smartphone,
+  Store,
+} from 'lucide-react'
 import { orders } from '../../lib/api'
 import { joinRoom, on } from '../../lib/socket'
 import { elapsed, elapsedMinutes, orderNo } from '../../lib/format'
@@ -188,12 +196,10 @@ function Ticket({
         </span>
       </div>
 
-      <ul className="flex-1 space-y-2 px-4 py-4">
+      <ul className="flex-1 space-y-3 px-4 py-4">
         {order.items?.map((it) => {
-          const custom = it.customization as {
-            sans?: string[]
-            extra?: string[]
-          } | null
+          const removed = it.customization?.removed ?? []
+          const added = it.customization?.added ?? []
           return (
             <li key={it.id}>
               <div className="flex gap-2.5">
@@ -204,16 +210,31 @@ function Ticket({
                   {it.productNameSnapshot}
                 </span>
               </div>
-              {custom?.sans?.length ? (
-                <p className="mt-0.5 ml-8 text-[13px] font-semibold text-coral-500">
-                  Sans {custom.sans.join(', ')}
-                </p>
-              ) : null}
-              {custom?.extra?.length ? (
-                <p className="mt-0.5 ml-8 text-[13px] font-semibold text-saffron-500">
-                  Extra {custom.extra.join(', ')}
-                </p>
-              ) : null}
+
+              {/* Les modifications sautent aux yeux : c'est là que les
+                  erreurs coûtent cher en cuisine. */}
+              {(removed.length > 0 || added.length > 0) && (
+                <div className="mt-1.5 ml-8 space-y-1">
+                  {removed.map((o) => (
+                    <p
+                      key={o.id}
+                      className="flex items-center gap-1.5 text-[14px] leading-tight font-bold text-coral-500"
+                    >
+                      <Ban size={13} strokeWidth={3} className="shrink-0" />
+                      SANS {o.label.toUpperCase()}
+                    </p>
+                  ))}
+                  {added.map((o) => (
+                    <p
+                      key={o.id}
+                      className="flex items-center gap-1.5 text-[14px] leading-tight font-bold text-saffron-500"
+                    >
+                      <PlusCircle size={13} strokeWidth={3} className="shrink-0" />
+                      EXTRA {o.label.toUpperCase()}
+                    </p>
+                  ))}
+                </div>
+              )}
             </li>
           )
         })}

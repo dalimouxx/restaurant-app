@@ -5,6 +5,7 @@ const Category = require('./Category');
 const Ingredient = require('./Ingredient');
 const Product = require('./Product');
 const ProductIngredient = require('./ProductIngredient');
+const ProductOption = require('./ProductOption');
 const Order = require('./Order');
 const OrderItem = require('./OrderItem');
 const CashSession = require('./CashSession');
@@ -18,6 +19,10 @@ Product.belongsTo(Category, { foreignKey: 'categoryId' });
 
 Product.belongsToMany(Ingredient, { through: ProductIngredient, foreignKey: 'productId' });
 Ingredient.belongsToMany(Product, { through: ProductIngredient, foreignKey: 'ingredientId' });
+
+Product.hasMany(ProductOption, { foreignKey: 'productId', as: 'options' });
+ProductOption.belongsTo(Product, { foreignKey: 'productId' });
+ProductOption.belongsTo(Ingredient, { foreignKey: 'ingredientId' });
 
 Order.hasMany(OrderItem, { foreignKey: 'orderId', as: 'items' });
 OrderItem.belongsTo(Order, { foreignKey: 'orderId' });
@@ -46,6 +51,7 @@ module.exports = {
   Ingredient,
   Product,
   ProductIngredient,
+  ProductOption,
   Order,
   OrderItem,
   CashSession,

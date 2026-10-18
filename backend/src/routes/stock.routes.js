@@ -1,5 +1,11 @@
 const express = require('express');
-const { Ingredient, StockMovement, Product, ProductIngredient } = require('../models');
+const {
+  Ingredient,
+  StockMovement,
+  Product,
+  ProductIngredient,
+  ProductOption,
+} = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
@@ -75,18 +81,50 @@ router.get('/:id/movements', requireAuth, requireRole('manager', 'admin', 'super
 // --- Deduit automatiquement le stock apres une vente, selon la recette de chaque produit ---
 async function deductStockForOrderItems(items, orderId) {
   for (const item of items) {
+    // Quantite a retirer par ingredient : la recette d'abord, puis les
+    // choix du client. Un « extra fromage » consomme du fromage, un
+    // « sans oignon » en rend : sans cela le benefice net serait fausse.
+    const needed = new Map();
+
     const links = await ProductIngredient.findAll({ where: { productId: item.productId } });
     for (const link of links) {
-      const ingredient = await Ingredient.findByPk(link.ingredientId);
+      needed.set(
+        link.ingredientId,
+        (needed.get(link.ingredientId) || 0) + link.quantityNeeded * item.quantity
+      );
+    }
+
+    const custom = item.customization || {};
+    const chosenIds = [
+      ...(custom.removed || []).map((o) => o.id),
+      ...(custom.added || []).map((o) => o.id),
+    ].filter(Boolean);
+
+    if (chosenIds.length > 0) {
+      const options = await ProductOption.findAll({ where: { id: chosenIds } });
+      for (const opt of options) {
+        if (!opt.ingredientId || !opt.quantityDelta) continue;
+        const delta = opt.quantityDelta * item.quantity;
+        const current = needed.get(opt.ingredientId) || 0;
+        needed.set(
+          opt.ingredientId,
+          opt.kind === 'add' ? current + delta : Math.max(0, current - delta)
+        );
+      }
+    }
+
+    for (const [ingredientId, quantity] of needed) {
+      if (quantity <= 0) continue;
+      const ingredient = await Ingredient.findByPk(ingredientId);
       if (!ingredient) continue;
-      const totalNeeded = link.quantityNeeded * item.quantity;
-      ingredient.quantityInStock = Math.max(0, ingredient.quantityInStock - totalNeeded);
+
+      ingredient.quantityInStock = Math.max(0, ingredient.quantityInStock - quantity);
       await ingredient.save();
 
       await StockMovement.create({
         ingredientId: ingredient.id,
         type: 'sale_deduction',
-        quantity: -totalNeeded,
+        quantity: -quantity,
         relatedOrderId: orderId,
       });
     }

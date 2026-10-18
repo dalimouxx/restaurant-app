@@ -193,16 +193,39 @@ export default function TrackingScreen() {
         {/* Détail */}
         <Card className="p-5">
           <p className="text-[15px] font-bold text-ink-900">Détail</p>
-          <ul className="mt-3 space-y-1.5">
-            {order.items?.map((it) => (
-              <li key={it.id} className="flex items-baseline gap-2.5 text-[14px]">
-                <span className="num font-bold text-ink-500">{it.quantity}×</span>
-                <span className="flex-1 text-ink-800">{it.productNameSnapshot}</span>
-                <span className="num font-semibold text-ink-700">
-                  {moneyDT(it.unitPrice * it.quantity)}
-                </span>
-              </li>
-            ))}
+          <ul className="mt-3 space-y-2">
+            {order.items?.map((it) => {
+              const removed = it.customization?.removed ?? []
+              const added = it.customization?.added ?? []
+              return (
+                <li key={it.id} className="flex items-start gap-2.5 text-[14px]">
+                  <span className="num font-bold text-ink-500">{it.quantity}×</span>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-ink-800">{it.productNameSnapshot}</span>
+                    {(removed.length > 0 || added.length > 0) && (
+                      <p className="mt-0.5 text-[12.5px] leading-snug">
+                        {removed.length > 0 && (
+                          <span className="text-coral-600">
+                            sans {removed.map((o) => o.label.toLowerCase()).join(', ')}
+                          </span>
+                        )}
+                        {removed.length > 0 && added.length > 0 && (
+                          <span className="text-ink-400"> · </span>
+                        )}
+                        {added.length > 0 && (
+                          <span className="text-petrol-600">
+                            extra {added.map((o) => o.label.toLowerCase()).join(', ')}
+                          </span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                  <span className="num font-semibold text-ink-700">
+                    {moneyDT(it.unitPrice * it.quantity)}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
 
           <dl className="mt-4 space-y-1.5 border-t border-ink-100 pt-3.5 text-[14px]">

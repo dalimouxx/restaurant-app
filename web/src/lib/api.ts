@@ -211,11 +211,15 @@ export const catalog = {
 
 /* ─────────── Commandes ─────────── */
 
+/**
+ * N'envoie que des identifiants : prix et intitulés sont relus en base par
+ * le serveur, qui refuse tout choix ne figurant pas sur le plat.
+ */
 const toItemsPayload = (lines: CartLine[]) =>
   lines.map((l) => ({
     productId: l.product.id,
     quantity: l.quantity,
-    customization: l.customization,
+    optionIds: l.options.map((o) => o.id),
   }))
 
 export const orders = {
@@ -224,6 +228,13 @@ export const orders = {
       method: 'POST',
       body: { items: toItemsPayload(lines), fulfillmentType },
       auth: false,
+    }),
+
+  /** Prise de commande au comptoir, par le caissier. */
+  createAtCounter: (lines: CartLine[], fulfillmentType: 'dine_in' | 'pickup') =>
+    request<Order>('/orders/counter', {
+      method: 'POST',
+      body: { items: toItemsPayload(lines), fulfillmentType },
     }),
 
   createOnline: (

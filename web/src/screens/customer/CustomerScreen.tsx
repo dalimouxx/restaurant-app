@@ -10,9 +10,9 @@ import {
   UtensilsCrossed,
 } from 'lucide-react'
 import { auth, catalog, orders } from '../../lib/api'
-import { useAuth, useCustomerCart } from '../../lib/store'
+import { lineUnitPrice, useAuth, useCustomerCart } from '../../lib/store'
 import { moneyDT } from '../../lib/format'
-import type { Category, Product } from '../../lib/types'
+import type { Category, Product, ProductOption } from '../../lib/types'
 import {
   Button,
   Card,
@@ -24,6 +24,7 @@ import {
   useToast,
 } from '../../components/ui'
 import { Wordmark } from '../../components/Shell'
+import { LineOptions, OptionPicker } from '../../components/OptionPicker'
 
 /** Indicatif : le montant réel est toujours recalculé par le serveur. */
 const DELIVERY_FEE_HINT = 7
@@ -34,6 +35,7 @@ export default function CustomerScreen() {
   const [activeCat, setActiveCat] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [checkout, setCheckout] = useState(false)
+  const [picking, setPicking] = useState<Product | null>(null)
 
   const cart = useCustomerCart()
   const { notify } = useToast()
@@ -114,7 +116,14 @@ export default function CustomerScreen() {
             <EmptyState icon={UtensilsCrossed} title="Rien dans cette catégorie" />
           ) : (
             visible.map((p) => (
-              <MenuRow key={p.id} product={p} onAdd={() => cart.add(p)} />
+              <MenuRow
+                key={p.id}
+                product={p}
+                onAdd={() => {
+                  if ((p.options?.length ?? 0) === 0) cart.add(p)
+                  else setPicking(p)
+                }}
+              />
             ))
           )}
         </div>
@@ -135,6 +144,16 @@ export default function CustomerScreen() {
       )}
 
       <Checkout open={checkout} onClose={() => setCheckout(false)} />
+
+      <OptionPicker
+        product={picking}
+        open={picking !== null}
+        onClose={() => setPicking(null)}
+        onConfirm={(options: ProductOption[]) => {
+          if (picking) cart.add(picking, options)
+          setPicking(null)
+        }}
+      />
     </div>
   )
 }
@@ -276,7 +295,8 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
                 <p className="truncate text-[14.5px] font-semibold text-ink-900">
                   {l.product.name}
                 </p>
-                <p className="num text-[13px] text-ink-500">{moneyDT(l.product.price)}</p>
+                <LineOptions options={l.options} />
+                <p className="num text-[13px] text-ink-500">{moneyDT(lineUnitPrice(l))}</p>
               </div>
               <div className="flex items-center gap-0.5 rounded-full border border-ink-200 p-0.5">
                 <button
@@ -296,7 +316,7 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
                 </button>
               </div>
               <span className="num w-[68px] shrink-0 text-right text-[14px] font-bold">
-                {moneyDT(l.product.price * l.quantity)}
+                {moneyDT(lineUnitPrice(l) * l.quantity)}
               </span>
             </li>
           ))}

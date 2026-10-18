@@ -1,6 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { Order, OrderItem, Product, Ingredient } = require('../models');
+const { Order, OrderItem, Product, ProductOption } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { deductStockForOrderItems } = require('./stock.routes');
 const socket = require('../sockets/socketHandler');
@@ -29,6 +29,35 @@ router.post('/kiosk', async (req, res) => {
   socket.emitNewKitchenTicket(order);
   res.status(201).json(order);
 });
+
+/**
+ * Prise de commande au comptoir par le caissier.
+ *
+ * Identique a la borne, mais tracee au nom du caissier et marquee
+ * « comptoir » pour distinguer les deux canaux dans les rapports.
+ */
+router.post(
+  '/counter',
+  requireAuth,
+  requireRole('cashier', 'manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const { items, fulfillmentType } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'La commande est vide.' });
+    }
+
+    const order = await createOrderWithItems({
+      items,
+      source: 'counter',
+      fulfillmentType: fulfillmentType || 'dine_in',
+      status: 'awaiting_payment',
+    });
+
+    socket.emitNewKitchenTicket(order);
+    res.status(201).json(order);
+  }
+);
 
 // --- Creation d'une commande en ligne (app mobile), avec choix retrait/livraison ---
 router.post('/online', requireAuth, async (req, res) => {
@@ -59,17 +88,52 @@ async function createOrderWithItems(opts) {
 
   let subtotal = 0;
   const enrichedItems = [];
+
   for (const item of items) {
     const product = await Product.findByPk(item.productId);
     if (!product) throw new Error('Produit introuvable: ' + item.productId);
-    if (!product.isAvailable) throw new Error(`"${product.name}" est actuellement indisponible (stock).`);
-    subtotal += product.price * item.quantity;
+    if (!product.isAvailable) {
+      throw new Error(`"${product.name}" est actuellement indisponible (stock).`);
+    }
+
+    /**
+     * Les choix viennent toujours de la liste predefinie du produit : le
+     * client envoie des identifiants, jamais un prix ni un texte libre.
+     * On relit les options en base pour que personne ne puisse fabriquer
+     * un supplement gratuit depuis le navigateur.
+     */
+    const requested = Array.isArray(item.optionIds) ? item.optionIds : [];
+    const options = requested.length
+      ? await ProductOption.findAll({
+          where: { id: requested, productId: product.id, isActive: true },
+        })
+      : [];
+
+    if (options.length !== requested.length) {
+      throw new Error(`Choix inconnu pour "${product.name}".`);
+    }
+
+    const extras = options.reduce((sum, o) => sum + o.extraPrice, 0);
+    const unitPrice = product.price + extras;
+    subtotal += unitPrice * item.quantity;
+
+    // Memorise pour la cuisine et pour le ticket, avec le vocabulaire fige.
+    const customization = {
+      removed: options
+        .filter((o) => o.kind === 'remove')
+        .map((o) => ({ id: o.id, label: o.label })),
+      added: options
+        .filter((o) => o.kind === 'add')
+        .map((o) => ({ id: o.id, label: o.label, price: o.extraPrice })),
+    };
+
     enrichedItems.push({
       productId: product.id,
       productNameSnapshot: product.name,
-      unitPrice: product.price,
+      unitPrice,
       quantity: item.quantity,
-      customization: item.customization || {},
+      customization,
+      optionIds: options.map((o) => o.id),
     });
   }
 
@@ -90,7 +154,9 @@ async function createOrderWithItems(opts) {
   });
 
   for (const item of enrichedItems) {
-    await OrderItem.create({ ...item, orderId: order.id });
+    // optionIds sert a la deduction du stock, pas au stockage de la ligne.
+    const { optionIds, ...line } = item;
+    await OrderItem.create({ ...line, orderId: order.id });
   }
 
   return getFullOrder(order.id);

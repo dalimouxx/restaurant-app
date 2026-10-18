@@ -5,6 +5,7 @@ import {
   Delete,
   Inbox,
   LockKeyhole,
+  PlusCircle,
   Receipt,
   Wallet,
 } from 'lucide-react'
@@ -32,6 +33,7 @@ import {
   useNow,
   useToast,
 } from '../../components/ui'
+import { NewOrderPanel } from './NewOrderPanel'
 
 /** Coupures courantes, pour encaisser sans taper le montant. */
 const QUICK_CASH = [5, 10, 20, 50]
@@ -149,6 +151,7 @@ function Register({
   const [loading, setLoading] = useState(true)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [closing, setClosing] = useState(false)
+  const [takingOrder, setTakingOrder] = useState(false)
   const { notify } = useToast()
   const now = useNow(20000)
 
@@ -234,6 +237,17 @@ function Register({
           </button>
         </div>
 
+        <div className="border-b border-ink-200 p-3">
+          <Button
+            size="lg"
+            icon={PlusCircle}
+            className="w-full"
+            onClick={() => setTakingOrder(true)}
+          >
+            Prendre une commande
+          </Button>
+        </div>
+
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -307,6 +321,12 @@ function Register({
           />
         )}
       </section>
+
+      <NewOrderPanel
+        open={takingOrder}
+        onClose={() => setTakingOrder(false)}
+        onCreated={() => load()}
+      />
 
       <CloseSession
         open={closing}
@@ -388,19 +408,42 @@ function PaymentPanel({
         {/* Détail */}
         <div className="min-h-0 overflow-y-auto border-ink-100 px-6 py-5 xl:border-r">
           <ul className="space-y-2.5">
-            {order.items?.map((it) => (
-              <li key={it.id} className="flex items-start gap-3">
-                <span className="num mt-px w-7 shrink-0 text-[14px] font-bold text-ink-500">
-                  {it.quantity}×
-                </span>
-                <span className="flex-1 text-[14.5px] font-medium text-ink-900">
-                  {it.productNameSnapshot}
-                </span>
-                <span className="num text-[14.5px] font-semibold text-ink-700">
-                  {money(it.unitPrice * it.quantity)}
-                </span>
-              </li>
-            ))}
+            {order.items?.map((it) => {
+              const removed = it.customization?.removed ?? []
+              const added = it.customization?.added ?? []
+              return (
+                <li key={it.id} className="flex items-start gap-3">
+                  <span className="num mt-px w-7 shrink-0 text-[14px] font-bold text-ink-500">
+                    {it.quantity}×
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-[14.5px] font-medium text-ink-900">
+                      {it.productNameSnapshot}
+                    </span>
+                    {(removed.length > 0 || added.length > 0) && (
+                      <p className="mt-0.5 text-[12.5px] leading-snug">
+                        {removed.length > 0 && (
+                          <span className="text-coral-600">
+                            sans {removed.map((o) => o.label.toLowerCase()).join(', ')}
+                          </span>
+                        )}
+                        {removed.length > 0 && added.length > 0 && (
+                          <span className="text-ink-400"> · </span>
+                        )}
+                        {added.length > 0 && (
+                          <span className="text-petrol-600">
+                            extra {added.map((o) => o.label.toLowerCase()).join(', ')}
+                          </span>
+                        )}
+                      </p>
+                    )}
+                  </div>
+                  <span className="num text-[14.5px] font-semibold text-ink-700">
+                    {money(it.unitPrice * it.quantity)}
+                  </span>
+                </li>
+              )
+            })}
           </ul>
 
           <div className="mt-5 border-t border-ink-100 pt-4">
