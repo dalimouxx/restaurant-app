@@ -1,6 +1,14 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Suspense, lazy, type ReactNode } from 'react'
-import { LayoutDashboard, Package, Receipt, Settings, Users, Wallet } from 'lucide-react'
+import {
+  LayoutDashboard,
+  Package,
+  Receipt,
+  Settings,
+  UtensilsCrossed,
+  Users,
+  Wallet,
+} from 'lucide-react'
 import { Spinner, ToastHost } from './components/ui'
 import { PrintHost } from './components/PrintHost'
 import { Shell, type NavItem } from './components/Shell'
@@ -26,6 +34,7 @@ const StockPage = lazy(() => import('./screens/manager/StockPage'))
 const TeamPage = lazy(() => import('./screens/manager/TeamPage'))
 const CashSessionsPage = lazy(() => import('./screens/manager/CashSessionsPage'))
 const SettingsPage = lazy(() => import('./screens/manager/SettingsPage'))
+const MenuPage = lazy(() => import('./screens/manager/MenuPage'))
 
 function Loading() {
   return (
@@ -49,7 +58,7 @@ function Guard({
 }) {
   const user = useAuth((s) => s.user)
 
-  if (!user) return <LoginScreen intent={intent} />
+  if (!user) return <LoginScreen intent={intent} allow={allow} />
 
   /**
    * Connecté, mais ce compte n'a pas accès à ce poste — le cas courant est
@@ -73,6 +82,7 @@ function RequireSession({ children }: { children: ReactNode }) {
 
 const MANAGER_NAV: NavItem[] = [
   { to: '/gestion', label: 'Finances', icon: LayoutDashboard, end: true },
+  { to: '/gestion/carte', label: 'Carte', icon: UtensilsCrossed },
   { to: '/gestion/stock', label: 'Stock', icon: Package },
   { to: '/gestion/equipe', label: 'Équipe', icon: Users },
   { to: '/gestion/caisses', label: 'Caisses', icon: Wallet },
@@ -172,6 +182,19 @@ export default function App() {
                   subtitle="Ce qui entre, ce qui sort, ce qui reste"
                 >
                   <FinancePage />
+                </ManagerShell>
+              </Guard>
+            }
+          />
+          <Route
+            path="/gestion/carte"
+            element={
+              <Guard allow={STAFF_PLUS} intent="manager">
+                <ManagerShell
+                  title="Carte"
+                  subtitle="Catégories, plats, choix prédéfinis et recettes"
+                >
+                  <MenuPage />
                 </ManagerShell>
               </Guard>
             }

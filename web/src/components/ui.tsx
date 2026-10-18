@@ -303,7 +303,10 @@ export function Modal({
             <X size={18} />
           </button>
         </div>
-        {children && <div className="px-5 py-4">{children}</div>}
+        {/* Un éditeur long doit défiler dans la modale, pas déborder de l'écran. */}
+        {children && (
+          <div className="max-h-[min(68dvh,660px)] overflow-y-auto px-5 py-4">{children}</div>
+        )}
         {footer && (
           <div className="flex justify-end gap-2 border-t border-ink-100 px-5 py-3.5">
             {footer}

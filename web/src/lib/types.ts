@@ -45,6 +45,15 @@ export interface ProductOption {
   label: string
   extraPrice: number
   displayOrder?: number
+  /** Ingrédient à bouger en stock quand le choix est retenu. */
+  ingredientId?: string | null
+  quantityDelta?: number
+}
+
+/** Une ligne de recette : ce qu'un plat consomme par unité vendue. */
+export interface RecipeLine {
+  ingredientId: string
+  quantityNeeded: number
 }
 
 export interface Product {
@@ -53,10 +62,16 @@ export interface Product {
   description?: string | null
   price: number
   imageUrl?: string | null
+  /** Épuisé pour aujourd'hui — réversible d'un geste. */
   isAvailable: boolean
+  /** Retiré de la carte. Absent du menu public. */
+  isArchived?: boolean
+  displayOrder?: number
   categoryId: string
   Category?: Category
   options?: ProductOption[]
+  /** Fournie seulement par la vue du gérant. */
+  recipe?: RecipeLine[]
 }
 
 export interface Ingredient {

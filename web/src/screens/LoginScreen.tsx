@@ -23,10 +23,13 @@ type Mode = 'code' | 'password'
 
 export default function LoginScreen({
   intent,
+  allow,
   signedInAs,
 }: {
   /** Poste visé, pour adapter la méthode de connexion proposée. */
   intent?: 'cashier' | 'kitchen' | 'manager' | 'driver'
+  /** Rôles admis sur la page demandée, pour y rester après connexion. */
+  allow?: readonly Role[]
   /**
    * Compte déjà connecté mais sans accès à ce poste — typiquement un client
    * qui a commandé en ligne sur le même appareil. On le signale au lieu de
@@ -42,6 +45,13 @@ export default function LoginScreen({
 
   function onSuccess(role: Role) {
     notify('Connexion réussie.', 'success')
+    /**
+     * Si le compte a accès à la page demandée, on y reste : quelqu'un qui
+     * ouvre un lien direct vers la Carte ou les Caisses veut cette page, pas
+     * l'accueil. Le garde de route affiche le poste dès que la session est
+     * posée. Sinon seulement, on redirige vers l'écran de son rôle.
+     */
+    if (allow?.includes(role)) return
     navigate(HOME_BY_ROLE[role], { replace: true })
   }
 

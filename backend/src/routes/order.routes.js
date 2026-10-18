@@ -92,6 +92,11 @@ async function createOrderWithItems(opts) {
   for (const item of items) {
     const product = await Product.findByPk(item.productId);
     if (!product) throw new Error('Produit introuvable: ' + item.productId);
+    // Un plat retire de la carte peut encore tenir dans un onglet reste
+    // ouvert ou dans un panier abandonne : on refuse sans ambiguite.
+    if (product.isArchived) {
+      throw new Error(`"${product.name}" ne figure plus a la carte.`);
+    }
     if (!product.isAvailable) {
       throw new Error(`"${product.name}" est actuellement indisponible (stock).`);
     }

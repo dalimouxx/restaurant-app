@@ -8,6 +8,8 @@ import type {
   Order,
   PaymentMethod,
   Product,
+  ProductOption,
+  RecipeLine,
   Role,
   Settings,
   TopProduct,
@@ -195,19 +197,94 @@ export const auth = {
 
 /* ─────────── Catalogue ─────────── */
 
+export interface ProductInput {
+  name: string
+  price: number
+  categoryId: string
+  description?: string | null
+  /** Data URL réduite par le navigateur, ou null pour retirer la photo. */
+  imageUrl?: string | null
+  recipe?: RecipeLine[]
+  options?: {
+    kind: 'remove' | 'add'
+    label: string
+    extraPrice?: number
+    ingredientId?: string | null
+    quantityDelta?: number
+  }[]
+}
+
 export const catalog = {
+  /** Menu public : sans les plats retirés de la carte. */
   products: () => request<Product[]>('/products', { auth: false }),
   categories: () => request<Category[]>('/products/categories', { auth: false }),
-  createProduct: (body: {
-    name: string
-    description?: string
-    price: number
-    categoryId: string
-    imageUrl?: string
-    recipe?: { ingredientId: string; quantityNeeded: number }[]
-  }) => request<Product>('/products', { method: 'POST', body }),
-  updateProduct: (id: string, body: Partial<Product>) =>
+
+  /**
+   * Menu prêt à afficher, pour la borne, la caisse et le site.
+   *
+   * Les catégories sans aucun plat visible sont écartées : une catégorie
+   * dont tous les plats ont été retirés de la carte reste en base, parce
+   * que les tickets passés s'y rattachent, mais elle ne doit pas donner un
+   * onglet vide au client.
+   */
+  menu: async () => {
+    const [categories, products] = await Promise.all([
+      catalog.categories(),
+      catalog.products(),
+    ])
+    return {
+      products,
+      categories: categories.filter((c) =>
+        products.some((p) => p.categoryId === c.id),
+      ),
+    }
+  },
+
+  /** Vue du gérant : tout, archives et recettes comprises. */
+  all: () => request<Product[]>('/products/all'),
+
+  createProduct: (body: ProductInput) =>
+    request<Product>('/products', { method: 'POST', body }),
+  updateProduct: (id: string, body: Partial<ProductInput> & { isAvailable?: boolean }) =>
     request<Product>(`/products/${id}`, { method: 'PUT', body }),
+  /** Épuisé / de nouveau disponible. */
+  toggleAvailable: (id: string) =>
+    request<Product>(`/products/${id}/toggle-available`, { method: 'POST' }),
+  /** Retire de la carte : supprime si jamais vendu, archive sinon. */
+  removeProduct: (id: string) =>
+    request<{ ok: true; deleted: boolean }>(`/products/${id}`, { method: 'DELETE' }),
+  restoreProduct: (id: string) =>
+    request<Product>(`/products/${id}/restore`, { method: 'POST' }),
+  reorderProducts: (ids: string[]) =>
+    request<{ ok: true }>('/products/reorder', { method: 'PUT', body: { ids } }),
+
+  setRecipe: (id: string, recipe: RecipeLine[]) =>
+    request<RecipeLine[]>(`/products/${id}/recipe`, { method: 'PUT', body: { recipe } }),
+
+  createCategory: (name: string) =>
+    request<Category>('/products/categories', { method: 'POST', body: { name } }),
+  renameCategory: (id: string, name: string) =>
+    request<Category>(`/products/categories/${id}`, { method: 'PUT', body: { name } }),
+  deleteCategory: (id: string) =>
+    request<{ ok: true }>(`/products/categories/${id}`, { method: 'DELETE' }),
+  reorderCategories: (ids: string[]) =>
+    request<Category[]>('/products/categories/reorder', { method: 'PUT', body: { ids } }),
+
+  addOption: (
+    productId: string,
+    body: {
+      kind: 'remove' | 'add'
+      label: string
+      extraPrice?: number
+      ingredientId?: string | null
+      quantityDelta?: number
+      displayOrder?: number
+    },
+  ) => request<ProductOption>(`/products/${productId}/options`, { method: 'POST', body }),
+  updateOption: (optionId: string, body: Partial<ProductOption>) =>
+    request<ProductOption>(`/products/options/${optionId}`, { method: 'PUT', body }),
+  deleteOption: (optionId: string) =>
+    request<{ ok: true }>(`/products/options/${optionId}`, { method: 'DELETE' }),
 }
 
 /* ─────────── Commandes ─────────── */

@@ -18,6 +18,7 @@ const fs = require('fs');
 const { sequelize } = require('./models');
 const socket = require('./sockets/socketHandler');
 const { bootstrapAdmin, bootstrapDemoMenu } = require('./bootstrap');
+const { runMigrations } = require('./migrations');
 
 const authRoutes = require('./routes/auth.routes');
 const { router: productRoutes } = require('./routes/product.routes');
@@ -204,9 +205,12 @@ async function start() {
     await connectWithRetry();
     console.log('Connexion a la base de donnees reussie.');
 
-    // Cree les tables manquantes. A remplacer par des migrations quand le
-    // schema evoluera sur une base contenant de vraies donnees.
+    // Cree les tables absentes. Ne touche pas aux tables existantes.
     await sequelize.sync();
+
+    // Met a jour les tables deja presentes : colonnes ajoutees depuis,
+    // types elargis. Voir migrations.js pour la regle d'ecriture.
+    await runMigrations();
 
     // Premier demarrage : cree le compte administrateur si la base est vide.
     const boot = await bootstrapAdmin();

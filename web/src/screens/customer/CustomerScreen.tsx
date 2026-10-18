@@ -43,7 +43,7 @@ export default function CustomerScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [cats, prods] = await Promise.all([catalog.categories(), catalog.products()])
+      const { categories: cats, products: prods } = await catalog.menu()
       setCategories(cats)
       setProducts(prods)
       setActiveCat((c) => c ?? cats[0]?.id ?? null)

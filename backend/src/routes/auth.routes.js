@@ -27,20 +27,32 @@ router.post('/login', async (req, res) => {
   res.json({ token: generateToken(user), user: sanitize(user) });
 });
 
-// --- Connexion caissier via code personnel court ---
+/**
+ * Les deux connexions sans mot de passe — code court et badge QR — sont
+ * reservees au personnel. Un client se connecte par telephone et mot de
+ * passe : lui ouvrir ces portes reviendrait a donner un acces employe a
+ * qui devine un code a quatre chiffres.
+ */
+const STAFF_ROLES = ['manager', 'cashier', 'cook', 'driver'];
+
+// --- Connexion du personnel via code personnel court ---
 router.post('/login-code', async (req, res) => {
-  const { loginCode } = req.body;
-  const user = await User.findOne({ where: { loginCode, role: 'cashier' } });
+  const loginCode = String(req.body.loginCode ?? '').trim();
+  if (!loginCode) return res.status(400).json({ error: 'Code requis.' });
+
+  const user = await User.findOne({ where: { loginCode, role: STAFF_ROLES } });
   if (!user) return res.status(401).json({ error: 'Code invalide.' });
   if (!user.isActive) return res.status(403).json({ error: 'Compte desactive.' });
 
   res.json({ token: generateToken(user), user: sanitize(user) });
 });
 
-// --- Connexion via scan du QR code du badge (caissier ou livreur) ---
+// --- Connexion via scan du badge QR (caissier, cuisinier, livreur) ---
 router.post('/login-qr', async (req, res) => {
-  const { qrToken } = req.body;
-  const user = await User.findOne({ where: { qrToken } });
+  const qrToken = String(req.body.qrToken ?? '').trim();
+  if (!qrToken) return res.status(400).json({ error: 'Badge requis.' });
+
+  const user = await User.findOne({ where: { qrToken, role: STAFF_ROLES } });
   if (!user) return res.status(401).json({ error: 'QR code invalide.' });
   if (!user.isActive) return res.status(403).json({ error: 'Compte desactive.' });
 
