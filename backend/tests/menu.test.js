@@ -54,6 +54,12 @@ async function run() {
   check(emptyCode.status === 400, 'Un code absent est refuse proprement')
   const emptyBadge = await req('POST', '/auth/login-qr', {})
   check(emptyBadge.status === 400, 'Un badge absent est refuse proprement')
+  const emptyPassword = await req('POST', '/auth/login', { email: 'a@b.tn' })
+  check(emptyPassword.status === 400, 'Un mot de passe absent est refuse proprement')
+  const wrongPassword = await req('POST', '/auth/login', {
+    email: 'manager@restaurant.com', password: 'faux',
+  })
+  check(wrongPassword.status === 401, 'Un mauvais mot de passe reste un 401')
 
   /* ───────── Categories ───────── */
   console.log('\n— Categories —')

@@ -15,7 +15,14 @@ function generateToken(user) {
 
 // --- Connexion classique (manager, admin) : email + mot de passe ---
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const email = String(req.body.email ?? '').trim();
+  const password = String(req.body.password ?? '');
+  // Sans cette garde, un champ vide atteint bcrypt, qui leve : la personne
+  // recoit une erreur serveur la ou un refus clair est attendu.
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email et mot de passe requis.' });
+  }
+
   const user = await User.findOne({ where: { email } });
   if (!user || !user.passwordHash) {
     return res.status(401).json({ error: 'Identifiants incorrects.' });
