@@ -6,6 +6,7 @@ let socket: Socket | null = null
 /** Connexion partagée : une seule par onglet, quel que soit le nombre d'écrans. */
 export function getSocket(): Socket {
   if (!socket) {
+    // Même origine que l'API : le serveur temps réel est le même processus.
     socket = io(API_BASE, {
       transports: ['websocket', 'polling'],
       reconnectionDelay: 800,

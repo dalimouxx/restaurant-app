@@ -14,12 +14,28 @@ import type {
 } from './types'
 
 /**
- * Adresse du backend. En développement, `VITE_API_URL` dans un fichier
- * `.env` permet de pointer vers une autre machine sans toucher au code.
+ * Adresse du backend.
+ *
+ * Trois situations :
+ * 1. `VITE_API_URL` renseigné — un serveur précis, utile pour tester depuis
+ *    un téléphone sur le réseau local.
+ * 2. Serveur de développement Vite (ports 5173 / 4173) — le backend écoute
+ *    à côté, sur le port 4000.
+ * 3. Partout ailleurs — l'interface est servie par le backend lui-même,
+ *    donc la même origine. Y ajouter un port la rendrait injoignable.
  */
-export const API_BASE =
-  (import.meta.env.VITE_API_URL as string | undefined) ??
-  `${window.location.protocol}//${window.location.hostname}:4000`
+function resolveApiBase(): string {
+  const configured = import.meta.env.VITE_API_URL as string | undefined
+  if (configured) return configured.replace(/\/+$/, '')
+
+  const { protocol, hostname, port, origin } = window.location
+  if (port === '5173' || port === '4173') {
+    return `${protocol}//${hostname}:4000`
+  }
+  return origin
+}
+
+export const API_BASE = resolveApiBase()
 
 const API = `${API_BASE}/api`
 
