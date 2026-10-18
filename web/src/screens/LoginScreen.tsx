@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Delete, KeyRound, QrCode } from 'lucide-react'
+import { Delete, KeyRound, LogOut, QrCode, UserCog } from 'lucide-react'
 import { auth } from '../lib/api'
 import { useAuth } from '../lib/store'
-import type { Role } from '../lib/types'
+import { roleLabel } from '../lib/format'
+import type { Role, User } from '../lib/types'
 import { Button, Field, Input, useToast } from '../components/ui'
 import { Wordmark } from '../components/Shell'
 
@@ -22,13 +23,21 @@ type Mode = 'code' | 'password'
 
 export default function LoginScreen({
   intent,
+  signedInAs,
 }: {
   /** Poste visé, pour adapter la méthode de connexion proposée. */
   intent?: 'cashier' | 'kitchen' | 'manager' | 'driver'
+  /**
+   * Compte déjà connecté mais sans accès à ce poste — typiquement un client
+   * qui a commandé en ligne sur le même appareil. On le signale au lieu de
+   * renvoyer la personne à l'accueil sans explication.
+   */
+  signedInAs?: User
 }) {
   const [mode, setMode] = useState<Mode>(intent === 'cashier' ? 'code' : 'password')
   const navigate = useNavigate()
   const setUser = useAuth((s) => s.setUser)
+  const logout = useAuth((s) => s.logout)
   const { notify } = useToast()
 
   function onSuccess(role: Role) {
@@ -56,6 +65,34 @@ export default function LoginScreen({
               ? 'Entrez votre code personnel.'
               : 'Entrez vos identifiants.'}
           </p>
+
+          {signedInAs && (
+            <div className="mt-5 rounded-[11px] border border-saffron-500/35 bg-saffron-500/10 p-3.5">
+              <div className="flex items-start gap-2.5">
+                <UserCog size={17} className="mt-px shrink-0 text-saffron-500" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13.5px] leading-snug font-semibold text-saffron-500">
+                    Ce poste demande un autre compte
+                  </p>
+                  <p className="mt-0.5 text-[12.5px] leading-snug text-ink-400">
+                    Vous êtes connecté comme {signedInAs.fullName} (
+                    {roleLabel[signedInAs.role].toLowerCase()}). Connectez-vous ci-dessous
+                    avec un compte du personnel.
+                  </p>
+                  <button
+                    onClick={() => {
+                      logout()
+                      notify('Session fermée.', 'info')
+                    }}
+                    className="mt-2 inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-300 underline-offset-4 transition-colors hover:text-white hover:underline"
+                  >
+                    <LogOut size={13} />
+                    Fermer cette session
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="mt-7">
             {mode === 'code' ? (

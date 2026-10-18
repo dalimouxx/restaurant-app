@@ -1,11 +1,11 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Suspense, lazy, type ReactNode } from 'react'
 import { LayoutDashboard, Package, Receipt, Users, Wallet } from 'lucide-react'
 import { Spinner, ToastHost } from './components/ui'
 import { Shell, type NavItem } from './components/Shell'
 import { useAuth } from './lib/store'
 import type { Role } from './lib/types'
-import LoginScreen, { HOME_BY_ROLE } from './screens/LoginScreen'
+import LoginScreen from './screens/LoginScreen'
 import PortalScreen from './screens/PortalScreen'
 import KioskScreen from './screens/kiosk/KioskScreen'
 import CashierScreen from './screens/cashier/CashierScreen'
@@ -46,14 +46,17 @@ function Guard({
   children: ReactNode
 }) {
   const user = useAuth((s) => s.user)
-  const location = useLocation()
 
   if (!user) return <LoginScreen intent={intent} />
 
-  // Connecté mais sur le mauvais poste : on renvoie chez soi plutôt que
-  // d'afficher une impasse.
+  /**
+   * Connecté, mais ce compte n'a pas accès à ce poste — le cas courant est
+   * un client qui a commandé en ligne sur l'appareil, puis un employé qui
+   * ouvre la caisse. Rediriger vers l'accueil donnait l'impression que le
+   * lien ne marchait pas : on affiche l'écran de connexion en expliquant.
+   */
   if (!allow.includes(user.role)) {
-    return <Navigate to={HOME_BY_ROLE[user.role]} replace state={{ from: location }} />
+    return <LoginScreen intent={intent} signedInAs={user} />
   }
 
   return <>{children}</>
