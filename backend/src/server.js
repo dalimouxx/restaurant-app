@@ -35,25 +35,53 @@ const app = express();
 app.set('trust proxy', 1);
 
 /**
- * CORS. En production l'application web est servie par ce meme serveur,
- * donc aucune origine externe n'est necessaire. ALLOWED_ORIGINS (liste
- * separee par des virgules) permet d'en autoriser explicitement.
- * En developpement, tout est autorise pour le serveur Vite du port 5173.
+ * CORS.
+ *
+ * L'interface est servie par ce meme serveur, mais Vite ecrit
+ * `<script type="module" crossorigin>` : le navigateur envoie alors un
+ * en-tete Origin meme pour un fichier de la meme origine. Refuser cette
+ * origine bloque le chargement du script et laisse la page blanche —
+ * un echec invisible avec curl, qui n'envoie pas d'Origin.
+ *
+ * On accepte donc toujours l'origine du service lui-meme, deduite de
+ * RENDER_EXTERNAL_URL quand l'hebergeur la fournit, et des en-tetes de
+ * la requete sinon. ALLOWED_ORIGINS reste disponible pour autoriser des
+ * domaines supplementaires, separes par des virgules.
  */
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((o) => o.trim())
   .filter(Boolean);
 
+if (process.env.RENDER_EXTERNAL_URL) {
+  allowedOrigins.push(process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, ''));
+}
+
+/** L'origine designe-t-elle l'hote effectivement appele ? */
+function isSameOrigin(req, origin) {
+  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
 app.use(
-  cors({
-    origin(origin, callback) {
-      if (process.env.NODE_ENV !== 'production') return callback(null, true);
-      // Requete same-origin ou outil sans en-tete Origin.
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error('Origine non autorisee'));
-    },
+  cors((req, callback) => {
+    const origin = req.headers.origin;
+
+    // Developpement : le serveur Vite tourne sur un autre port.
+    if (process.env.NODE_ENV !== 'production') {
+      return callback(null, { origin: true });
+    }
+    // Outil ou navigation directe, sans en-tete Origin.
+    if (!origin) return callback(null, { origin: true });
+
+    if (isSameOrigin(req, origin) || allowedOrigins.includes(origin)) {
+      return callback(null, { origin: true });
+    }
+    return callback(new Error('Origine non autorisee'));
   })
 );
 
