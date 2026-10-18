@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Banknote,
+  Check,
   CreditCard,
   Delete,
   Inbox,
   LockKeyhole,
   PlusCircle,
+  Printer,
   Receipt,
   Wallet,
 } from 'lucide-react'
@@ -34,6 +36,8 @@ import {
   useToast,
 } from '../../components/ui'
 import { NewOrderPanel } from './NewOrderPanel'
+import { usePrint } from '../../components/PrintHost'
+import { useAuth } from '../../lib/store'
 
 /** Coupures courantes, pour encaisser sans taper le montant. */
 const QUICK_CASH = [5, 10, 20, 50]
@@ -153,7 +157,30 @@ function Register({
   const [closing, setClosing] = useState(false)
   const [takingOrder, setTakingOrder] = useState(false)
   const { notify } = useToast()
+  const { print } = usePrint()
+  const user = useAuth((s) => s.user)
   const now = useNow(20000)
+
+  /** Impression du reçu à l'encaissement, mémorisée sur ce poste. */
+  const [autoPrint, setAutoPrint] = useState(() => {
+    try {
+      return localStorage.getItem('service.autoPrint') !== 'off'
+    } catch {
+      return true
+    }
+  })
+
+  function toggleAutoPrint() {
+    setAutoPrint((v) => {
+      const next = !v
+      try {
+        localStorage.setItem('service.autoPrint', next ? 'on' : 'off')
+      } catch {
+        /* mode privé : le choix vaut pour cette session */
+      }
+      return next
+    })
+  }
 
   const load = useCallback(async () => {
     try {
@@ -207,8 +234,15 @@ function Register({
   async function pay(method: PaymentMethod) {
     if (!selected) return
     try {
-      await orders.pay(selected.id, method)
+      const paid = await orders.pay(selected.id, method)
       notify(`${orderNo(selected.orderNumber)} encaissée, envoyée en cuisine.`, 'success')
+
+      // Le reçu part dès l'encaissement : c'est le moment où le client
+      // est devant la caisse, pas trois clics plus tard.
+      if (autoPrint) {
+        print({ order: paid, kind: 'receipt', cashierName: user?.fullName })
+      }
+
       setQueue((q) => q.filter((o) => o.id !== selected.id))
       setSelectedId(null)
       load()
@@ -299,7 +333,23 @@ function Register({
           )}
         </div>
 
-        <div className="border-t border-ink-200 px-5 py-3">
+        <div className="space-y-2 border-t border-ink-200 px-5 py-3">
+          <button
+            onClick={toggleAutoPrint}
+            className="flex w-full items-center gap-2 text-[12.5px] font-semibold text-ink-600 transition-colors hover:text-ink-900"
+          >
+            <span
+              className={`grid size-4 place-items-center rounded-[4px] border ${
+                autoPrint
+                  ? 'border-petrol-600 bg-petrol-600 text-white'
+                  : 'border-ink-300'
+              }`}
+            >
+              {autoPrint && <Check size={11} strokeWidth={3.5} />}
+            </span>
+            Imprimer le reçu à l'encaissement
+          </button>
+
           <div className="flex items-center justify-between text-[13px]">
             <span className="text-ink-500">Fond de caisse</span>
             <span className="num font-semibold text-ink-900">
@@ -312,7 +362,14 @@ function Register({
       {/* Encaissement */}
       <section className="min-h-0 bg-white">
         {selected ? (
-          <PaymentPanel key={selected.id} order={selected} onPay={pay} />
+          <PaymentPanel
+            key={selected.id}
+            order={selected}
+            onPay={pay}
+            onPrint={() =>
+              print({ order: selected, kind: 'receipt', cashierName: user?.fullName })
+            }
+          />
         ) : (
           <EmptyState
             icon={Receipt}
@@ -346,9 +403,11 @@ function Register({
 function PaymentPanel({
   order,
   onPay,
+  onPrint,
 }: {
   order: Order
   onPay: (method: PaymentMethod) => void
+  onPrint: () => void
 }) {
   const [tendered, setTendered] = useState('')
   const due = order.subtotal
@@ -516,9 +575,18 @@ function PaymentPanel({
               Carte
             </Button>
           </div>
-          <p className="mt-2 text-center text-[11.5px] text-ink-400">
-            Entrée encaisse en espèces · Échap efface
-          </p>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <p className="text-[11.5px] text-ink-400">
+              Entrée encaisse en espèces · Échap efface
+            </p>
+            <button
+              onClick={onPrint}
+              className="flex shrink-0 items-center gap-1.5 text-[12px] font-semibold text-ink-500 transition-colors hover:text-petrol-700"
+            >
+              <Printer size={13} />
+              Imprimer
+            </button>
+          </div>
         </div>
       </div>
     </div>

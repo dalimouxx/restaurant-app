@@ -154,6 +154,16 @@ export interface DriverStats {
   }[]
 }
 
+/** Informations de l'établissement, imprimées sur les tickets. */
+export interface Settings {
+  restaurantName: string
+  address: string
+  phone: string
+  taxId: string
+  ticketFooter: string
+  currency: string
+}
+
 /** Article du panier, côté navigateur uniquement. */
 export interface CartLine {
   product: Product

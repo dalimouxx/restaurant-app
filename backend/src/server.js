@@ -27,6 +27,7 @@ const cashierRoutes = require('./routes/cashier.routes');
 const deliveryRoutes = require('./routes/delivery.routes');
 const reportRoutes = require('./routes/report.routes');
 const userRoutes = require('./routes/user.routes');
+const settingsRoutes = require('./routes/settings.routes');
 
 const app = express();
 
@@ -97,6 +98,7 @@ app.use('/api/cashier', cashierRoutes);
 app.use('/api/delivery', deliveryRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/settings', settingsRoutes);
 
 /**
  * Application web (build Vite).

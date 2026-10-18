@@ -5,6 +5,7 @@ import {
   ChefHat,
   Check,
   PlusCircle,
+  Printer,
   Smartphone,
   Store,
 } from 'lucide-react'
@@ -14,6 +15,7 @@ import { elapsed, elapsedMinutes, orderNo } from '../../lib/format'
 import type { Order } from '../../lib/types'
 import { EmptyState, useNow, useToast } from '../../components/ui'
 import { ConnectionDot } from '../../components/ConnectionDot'
+import { usePrint } from '../../components/PrintHost'
 import { Wordmark } from '../../components/Shell'
 
 /** Seuils d'alerte, en minutes depuis l'arrivée du ticket. */
@@ -25,6 +27,7 @@ export default function KitchenScreen() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const { notify } = useToast()
+  const { print } = usePrint()
   const now = useNow(10000)
 
   const load = useCallback(async () => {
@@ -122,6 +125,7 @@ export default function KitchenScreen() {
                 now={now}
                 busy={busyId === order.id}
                 onAdvance={() => advance(order)}
+                onPrint={() => print({ order, kind: 'kitchen' })}
               />
             ))}
           </div>
@@ -136,11 +140,13 @@ function Ticket({
   now,
   busy,
   onAdvance,
+  onPrint,
 }: {
   order: Order
   now: number
   busy: boolean
   onAdvance: () => void
+  onPrint: () => void
 }) {
   const mins = elapsedMinutes(order.createdAt, now)
   const isReady = order.status === 'ready'
@@ -183,17 +189,27 @@ function Ticket({
             <span className="text-[12px] font-bold">{channel.label}</span>
           </div>
         </div>
-        <span
-          className={`num rounded-full px-2 py-1 text-[12px] font-bold ${
-            late
-              ? 'bg-coral-500 text-white'
-              : warn
-                ? 'bg-saffron-500 text-ink-900'
-                : 'bg-ink-700 text-ink-300'
-          }`}
-        >
-          {elapsed(order.createdAt, now)}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onPrint}
+            aria-label="Imprimer le bon"
+            title="Imprimer le bon"
+            className="grid size-7 place-items-center rounded-[7px] text-ink-500 transition-colors hover:bg-ink-700 hover:text-white"
+          >
+            <Printer size={14} />
+          </button>
+          <span
+            className={`num rounded-full px-2 py-1 text-[12px] font-bold ${
+              late
+                ? 'bg-coral-500 text-white'
+                : warn
+                  ? 'bg-saffron-500 text-ink-900'
+                  : 'bg-ink-700 text-ink-300'
+            }`}
+          >
+            {elapsed(order.createdAt, now)}
+          </span>
+        </div>
       </div>
 
       <ul className="flex-1 space-y-3 px-4 py-4">

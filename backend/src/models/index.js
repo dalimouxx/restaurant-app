@@ -11,6 +11,7 @@ const OrderItem = require('./OrderItem');
 const CashSession = require('./CashSession');
 const StockMovement = require('./StockMovement');
 const DriverLocation = require('./DriverLocation');
+const { Setting } = require('./Setting');
 
 // --- Associations ---
 
@@ -57,4 +58,5 @@ module.exports = {
   CashSession,
   StockMovement,
   DriverLocation,
+  Setting,
 };

@@ -9,6 +9,7 @@ import type {
   PaymentMethod,
   Product,
   Role,
+  Settings,
   TopProduct,
   User,
 } from './types'
@@ -327,6 +328,14 @@ export const reports = {
   topProducts: () => request<TopProduct[]>('/reports/top-products'),
   lowStock: () => request<Ingredient[]>('/reports/low-stock'),
   cashSessions: () => request<CashSession[]>('/reports/cash-sessions'),
+}
+
+/* ─────────── Réglages de l'établissement ─────────── */
+
+export const settingsApi = {
+  get: () => request<Settings>('/settings', { auth: false }),
+  save: (patch: Partial<Settings>) =>
+    request<Settings>('/settings', { method: 'PUT', body: patch }),
 }
 
 /* ─────────── Employés ─────────── */

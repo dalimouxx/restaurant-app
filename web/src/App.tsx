@@ -1,7 +1,8 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Suspense, lazy, type ReactNode } from 'react'
-import { LayoutDashboard, Package, Receipt, Users, Wallet } from 'lucide-react'
+import { LayoutDashboard, Package, Receipt, Settings, Users, Wallet } from 'lucide-react'
 import { Spinner, ToastHost } from './components/ui'
+import { PrintHost } from './components/PrintHost'
 import { Shell, type NavItem } from './components/Shell'
 import { useAuth } from './lib/store'
 import type { Role } from './lib/types'
@@ -24,6 +25,7 @@ const FinancePage = lazy(() => import('./screens/manager/FinancePage'))
 const StockPage = lazy(() => import('./screens/manager/StockPage'))
 const TeamPage = lazy(() => import('./screens/manager/TeamPage'))
 const CashSessionsPage = lazy(() => import('./screens/manager/CashSessionsPage'))
+const SettingsPage = lazy(() => import('./screens/manager/SettingsPage'))
 
 function Loading() {
   return (
@@ -74,6 +76,7 @@ const MANAGER_NAV: NavItem[] = [
   { to: '/gestion/stock', label: 'Stock', icon: Package },
   { to: '/gestion/equipe', label: 'Équipe', icon: Users },
   { to: '/gestion/caisses', label: 'Caisses', icon: Wallet },
+  { to: '/gestion/reglages', label: 'Réglages', icon: Settings },
 ]
 
 function ManagerShell({
@@ -95,6 +98,7 @@ function ManagerShell({
 export default function App() {
   return (
     <ToastHost>
+      <PrintHost>
       <BrowserRouter>
         <Suspense fallback={<Loading />}>
         <Routes>
@@ -212,10 +216,25 @@ export default function App() {
             }
           />
 
+          <Route
+            path="/gestion/reglages"
+            element={
+              <Guard allow={STAFF_PLUS} intent="manager">
+                <ManagerShell
+                  title="Réglages"
+                  subtitle="Informations imprimées sur les tickets"
+                >
+                  <SettingsPage />
+                </ManagerShell>
+              </Guard>
+            }
+          />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
       </BrowserRouter>
+      </PrintHost>
     </ToastHost>
   )
 }
