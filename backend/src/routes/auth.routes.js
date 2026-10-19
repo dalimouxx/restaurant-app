@@ -2,8 +2,16 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
+const { guard, recordFailure, recordSuccess } = require('../middleware/rateLimit');
 
 const router = express.Router();
+
+/**
+ * Toutes les voies d'entree partagent un meme compteur d'echecs : sans
+ * cela, un attaquant bloque sur les codes passerait simplement aux
+ * badges. C'est l'acces au systeme qui est limite, pas une methode.
+ */
+const LOGIN = 'connexion';
 
 function generateToken(user) {
   return jwt.sign(
@@ -14,23 +22,27 @@ function generateToken(user) {
 }
 
 // --- Connexion classique (manager, admin) : email + mot de passe ---
-router.post('/login', async (req, res) => {
+router.post('/login', guard(LOGIN), async (req, res) => {
   const email = String(req.body.email ?? '').trim();
   const password = String(req.body.password ?? '');
   // Sans cette garde, un champ vide atteint bcrypt, qui leve : la personne
-  // recoit une erreur serveur la ou un refus clair est attendu.
+  // recoit une erreur serveur la ou un refus clair est attendu. Une saisie
+  // incomplete n'est pas une tentative : elle ne compte pas comme un echec.
   if (!email || !password) {
     return res.status(400).json({ error: 'Email et mot de passe requis.' });
   }
 
   const user = await User.findOne({ where: { email } });
-  if (!user || !user.passwordHash) {
+  const valid =
+    user && user.passwordHash && (await bcrypt.compare(password, user.passwordHash));
+
+  if (!valid) {
+    recordFailure(LOGIN, req);
     return res.status(401).json({ error: 'Identifiants incorrects.' });
   }
-  const valid = await bcrypt.compare(password, user.passwordHash);
-  if (!valid) return res.status(401).json({ error: 'Identifiants incorrects.' });
   if (!user.isActive) return res.status(403).json({ error: 'Compte desactive.' });
 
+  recordSuccess(LOGIN, req);
   res.json({ token: generateToken(user), user: sanitize(user) });
 });
 
@@ -43,26 +55,34 @@ router.post('/login', async (req, res) => {
 const STAFF_ROLES = ['manager', 'cashier', 'cook', 'driver'];
 
 // --- Connexion du personnel via code personnel court ---
-router.post('/login-code', async (req, res) => {
+router.post('/login-code', guard(LOGIN), async (req, res) => {
   const loginCode = String(req.body.loginCode ?? '').trim();
   if (!loginCode) return res.status(400).json({ error: 'Code requis.' });
 
   const user = await User.findOne({ where: { loginCode, role: STAFF_ROLES } });
-  if (!user) return res.status(401).json({ error: 'Code invalide.' });
+  if (!user) {
+    recordFailure(LOGIN, req);
+    return res.status(401).json({ error: 'Code invalide.' });
+  }
   if (!user.isActive) return res.status(403).json({ error: 'Compte desactive.' });
 
+  recordSuccess(LOGIN, req);
   res.json({ token: generateToken(user), user: sanitize(user) });
 });
 
 // --- Connexion via scan du badge QR (caissier, cuisinier, livreur) ---
-router.post('/login-qr', async (req, res) => {
+router.post('/login-qr', guard(LOGIN), async (req, res) => {
   const qrToken = String(req.body.qrToken ?? '').trim();
   if (!qrToken) return res.status(400).json({ error: 'Badge requis.' });
 
   const user = await User.findOne({ where: { qrToken, role: STAFF_ROLES } });
-  if (!user) return res.status(401).json({ error: 'QR code invalide.' });
+  if (!user) {
+    recordFailure(LOGIN, req);
+    return res.status(401).json({ error: 'QR code invalide.' });
+  }
   if (!user.isActive) return res.status(403).json({ error: 'Compte desactive.' });
 
+  recordSuccess(LOGIN, req);
   res.json({ token: generateToken(user), user: sanitize(user) });
 });
 

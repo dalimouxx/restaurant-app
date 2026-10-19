@@ -1,17 +1,46 @@
 const express = require('express');
+const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
-const { Order, OrderItem, Product, ProductOption } = require('../models');
+const { Order, OrderItem, Product, ProductOption, User } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { deductStockForOrderItems } = require('./stock.routes');
+const { deductStockForOrderItems, restoreStockForOrderItems } = require('./stock.routes');
 const socket = require('../sockets/socketHandler');
+const audit = require('../audit');
 
 const router = express.Router();
 
-// Genere le prochain numero de commande du jour (simple compteur, remis a 1 chaque jour en pratique
-// via une tache planifiee ou un filtre sur la date - simplifie ici)
-async function getNextOrderNumber() {
-  const count = await Order.count();
-  return (count % 999) + 1;
+/**
+ * Journee commerciale, au fuseau du restaurant.
+ *
+ * Une commande prise a 00 h 30 appartient au service de la veille pour le
+ * personnel, mais le serveur, lui, raisonne en UTC. On fige donc la date
+ * locale a la creation plutot que de la recalculer ensuite : c'est elle
+ * qui porte la numerotation du jour.
+ */
+const TIMEZONE = process.env.RESTAURANT_TIMEZONE || 'Africa/Tunis';
+
+function businessDay(date = new Date()) {
+  // 'en-CA' donne AAAA-MM-JJ, le format attendu par une colonne DATE.
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+/**
+ * Numero affiche au client : reprend a 1 chaque jour.
+ *
+ * L'ancien compteur tournait sur le nombre total de commandes modulo 999 :
+ * le numero 1 pouvait designer une commande d'hier, et deux commandes
+ * pouvaient porter le meme numero le meme jour. Un index unique sur
+ * (journee, numero) rend cela impossible, et l'appelant retente si deux
+ * commandes se croisent.
+ */
+async function getNextOrderNumber(orderDate) {
+  const highest = await Order.max('orderNumber', { where: { orderDate } });
+  return Number.isFinite(highest) ? highest + 1 : 1;
 }
 
 // --- Creation d'une commande depuis la borne (kiosque) ou le comptoir : statut = en attente de paiement ---
@@ -52,6 +81,7 @@ router.post(
       source: 'counter',
       fulfillmentType: fulfillmentType || 'dine_in',
       status: 'awaiting_payment',
+      cashierId: req.user.id,
     });
 
     socket.emitNewKitchenTicket(order);
@@ -142,21 +172,34 @@ async function createOrderWithItems(opts) {
     });
   }
 
-  const orderNumber = await getNextOrderNumber();
-  const order = await Order.create({
-    orderNumber,
-    source,
-    fulfillmentType,
-    status,
-    customerId,
-    subtotal,
-    deliveryFee,
-    totalAmount: subtotal + deliveryFee,
-    deliveryAddress,
-    deliveryLat,
-    deliveryLng,
-    qrToken: uuidv4(),
-  });
+  const orderDate = businessDay();
+
+  // Deux commandes prises dans la meme seconde peuvent viser le meme
+  // numero. L'index unique les departage et on retente, plutot que de
+  // laisser deux tickets « 12 » circuler en salle.
+  let order = null;
+  for (let attempt = 1; attempt <= 5 && !order; attempt++) {
+    try {
+      order = await Order.create({
+        orderNumber: await getNextOrderNumber(orderDate),
+        orderDate,
+        source,
+        fulfillmentType,
+        status,
+        customerId,
+        cashierId: opts.cashierId ?? null,
+        subtotal,
+        deliveryFee,
+        totalAmount: subtotal + deliveryFee,
+        deliveryAddress,
+        deliveryLat,
+        deliveryLng,
+        qrToken: uuidv4(),
+      });
+    } catch (err) {
+      if (err.name !== 'SequelizeUniqueConstraintError' || attempt === 5) throw err;
+    }
+  }
 
   for (const item of enrichedItems) {
     // optionIds sert a la deduction du stock, pas au stockage de la ligne.
@@ -172,9 +215,24 @@ async function getFullOrder(orderId) {
 }
 
 // --- Liste des commandes en attente de paiement (vue caisse) ---
+/**
+ * File d'attente de la caisse.
+ *
+ * Bornee a douze heures : une commande prise a la borne puis abandonnee
+ * par le client reste « en attente de paiement » pour toujours. Sans cette
+ * limite, la file grossit de jour en jour et le caissier finit par
+ * chercher la commande du moment au milieu de celles de la semaine. Douze
+ * heures couvrent largement un service, meme a cheval sur minuit, sans
+ * avoir a raisonner sur les fuseaux.
+ */
+const QUEUE_WINDOW_MS = 12 * 60 * 60 * 1000;
+
 router.get('/pending-payment', requireAuth, requireRole('cashier', 'manager', 'admin', 'super_admin'), async (req, res) => {
   const orders = await Order.findAll({
-    where: { status: 'awaiting_payment' },
+    where: {
+      status: 'awaiting_payment',
+      createdAt: { [Op.gte]: new Date(Date.now() - QUEUE_WINDOW_MS) },
+    },
     include: [{ model: OrderItem, as: 'items' }],
     order: [['createdAt', 'ASC']],
   });
@@ -204,6 +262,119 @@ router.post('/:id/pay', requireAuth, requireRole('cashier', 'manager', 'admin', 
 
   res.json(order);
 });
+
+/* ─────────── Annulation ─────────── */
+
+/**
+ * Motifs d'annulation, fermes.
+ *
+ * Le caissier ne tape rien : il choisit. Une zone de texte libre donnerait
+ * « erreur », « rien », ou pire une justification ecrite apres coup. Un
+ * motif choisi dans une liste reste comparable d'un mois sur l'autre, et
+ * c'est ce qui permet de voir qu'un poste annule trois fois plus que les
+ * autres.
+ */
+const CANCEL_REASONS = {
+  entry_error: 'Erreur de saisie',
+  customer_left: 'Client parti',
+  out_of_stock: 'Plat indisponible',
+  duplicate: 'Commande en double',
+  kitchen_error: 'Erreur de préparation',
+};
+
+router.get('/cancel-reasons', requireAuth, async (req, res) => {
+  res.json(
+    Object.entries(CANCEL_REASONS).map(([code, label]) => ({ code, label }))
+  );
+});
+
+/**
+ * Annule une commande. Jamais de suppression : le numero reste pris, la
+ * ligne reste lisible, et qui a annule quoi se retrouve dans le journal.
+ */
+router.post(
+  '/:id/cancel',
+  requireAuth,
+  requireRole('cashier', 'cook', 'manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const reason = String(req.body.reason ?? '');
+    if (!CANCEL_REASONS[reason]) {
+      return res.status(400).json({ error: 'Motif d\'annulation invalide.' });
+    }
+
+    const order = await getFullOrder(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
+    if (order.status === 'cancelled') {
+      return res.status(409).json({ error: 'Cette commande est déjà annulée.' });
+    }
+
+    /**
+     * Une commande remise au client est un remboursement, pas une erreur de
+     * saisie : elle touche la caisse apres coup et doit passer par le
+     * gerant. Le caissier, lui, corrige ce qu'il vient de faire.
+     */
+    const isManager = ['manager', 'admin', 'super_admin'].includes(req.user.role);
+    if (['delivered', 'completed'].includes(order.status) && !isManager) {
+      return res.status(403).json({
+        error: 'Commande déjà remise au client : seul le gérant peut l\'annuler.',
+      });
+    }
+
+    // Le stock n'a ete deduit qu'au paiement : on ne rend que ce qui est parti.
+    const wasPaid = Boolean(order.paidAt);
+    if (wasPaid) await restoreStockForOrderItems(order.items, order.id);
+
+    order.status = 'cancelled';
+    order.cancelReason = reason;
+    order.cancelledById = req.user.id;
+    order.cancelledAt = new Date();
+    await order.save();
+
+    socket.emitOrderStatusChanged(order);
+
+    await audit.record(req, {
+      action: 'order.cancelled',
+      entityType: 'order',
+      entityId: order.id,
+      summary:
+        `Commande n° ${order.orderNumber} annulée (${CANCEL_REASONS[reason]})` +
+        (wasPaid ? ` — ${order.totalAmount.toFixed(3)} DT déjà encaissés` : ''),
+      details: {
+        orderNumber: order.orderNumber,
+        reason,
+        reasonLabel: CANCEL_REASONS[reason],
+        wasPaid,
+        totalAmount: order.totalAmount,
+        paymentMethod: order.paymentMethod,
+        stockRestored: wasPaid,
+      },
+    });
+
+    res.json(await getFullOrder(order.id));
+  }
+);
+
+/**
+ * Commandes de la journee en cours, les plus recentes d'abord.
+ *
+ * C'est ce qui manquait au caissier : une fois encaissee, une commande
+ * disparaissait de son ecran. Reimprimer un recu ou rattraper une erreur
+ * commise trente secondes plus tot n'etait plus possible.
+ */
+router.get(
+  '/recent',
+  requireAuth,
+  requireRole('cashier', 'manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const orders = await Order.findAll({
+      where: { orderDate: businessDay() },
+      include: [{ model: OrderItem, as: 'items' }],
+      order: [['createdAt', 'DESC']],
+      limit: 40,
+    });
+    res.json(orders);
+  }
+);
 
 // --- Cuisine : liste des commandes actives (en cours de preparation) ---
 router.get('/kitchen/queue', requireAuth, requireRole('cook', 'manager', 'admin', 'super_admin'), async (req, res) => {

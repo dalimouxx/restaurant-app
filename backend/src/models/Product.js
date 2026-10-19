@@ -20,6 +20,11 @@ const Product = sequelize.define('Product', {
    *  ou d'un geste depuis la carte et la cuisine. Reversible. */
   isAvailable: { type: DataTypes.BOOLEAN, defaultValue: true },
 
+  /** Epuise parce qu'on l'a decide, et non parce que le stock manque.
+   *  Sans cette distinction, la vente suivante remettrait en carte un plat
+   *  que la cuisine vient de declarer epuise. */
+  manuallyUnavailable: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+
   /** Retire de la carte, definitivement. On archive plutot que supprimer :
    *  les commandes passees et les statistiques y font reference. */
   isArchived: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },

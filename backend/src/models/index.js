@@ -12,6 +12,7 @@ const CashSession = require('./CashSession');
 const StockMovement = require('./StockMovement');
 const DriverLocation = require('./DriverLocation');
 const { Setting } = require('./Setting');
+const AuditLog = require('./AuditLog');
 
 // --- Associations ---
 
@@ -59,4 +60,5 @@ module.exports = {
   StockMovement,
   DriverLocation,
   Setting,
+  AuditLog,
 };

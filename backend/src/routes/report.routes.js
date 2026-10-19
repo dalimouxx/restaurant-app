@@ -1,6 +1,8 @@
 const express = require('express');
 const { Op } = require('sequelize');
-const { Order, OrderItem, Ingredient, StockMovement, CashSession } = require('../models');
+const {
+  Order, OrderItem, Ingredient, StockMovement, CashSession, AuditLog,
+} = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 
 const router = express.Router();
@@ -26,10 +28,16 @@ router.get('/net-profit', requireAuth, requireRole('manager', 'admin', 'super_ad
   const totalDeliveryFees = orders.reduce((sum, o) => sum + o.deliveryFee, 0);
   const driverPayout = totalDeliveryFees * (DRIVER_COMMISSION_PERCENT / 100);
 
-  // Cout des ingredients consommes (via les mouvements de type sale_deduction)
+  /**
+   * Cout des ingredients reellement consommes.
+   *
+   * Les ventes retirent du stock, les annulations lui rendent ce qui n'a
+   * pas ete prepare. Compter les seules deductions ferait porter au
+   * benefice net le cout de plats jamais sortis de la cuisine.
+   */
   const movements = await StockMovement.findAll({
     where: {
-      type: 'sale_deduction',
+      type: ['sale_deduction', 'cancellation'],
       ...(from || to ? { createdAt: dateFilter } : {}),
     },
     include: [{ model: Ingredient }],
@@ -37,7 +45,8 @@ router.get('/net-profit', requireAuth, requireRole('manager', 'admin', 'super_ad
 
   const ingredientCost = movements.reduce((sum, m) => {
     const cost = m.Ingredient ? m.Ingredient.costPerUnit : 0;
-    return sum + Math.abs(m.quantity) * cost;
+    const signed = m.type === 'cancellation' ? -Math.abs(m.quantity) : Math.abs(m.quantity);
+    return sum + signed * cost;
   }, 0);
 
   const netProfit = totalRevenue - ingredientCost - driverPayout;
@@ -60,7 +69,16 @@ router.get('/low-stock', requireAuth, requireRole('manager', 'admin', 'super_adm
 
 // --- Produits les plus vendus ---
 router.get('/top-products', requireAuth, requireRole('manager', 'admin', 'super_admin'), async (req, res) => {
-  const items = await OrderItem.findAll();
+  // Les lignes des commandes annulees n'ont jamais ete vendues : les
+  // compter ferait remonter un plat qu'on a surtout saisi par erreur.
+  const items = await OrderItem.findAll({
+    include: [{
+      model: Order,
+      attributes: [],
+      required: true,
+      where: { status: { [Op.ne]: 'cancelled' } },
+    }],
+  });
   const grouped = {};
   for (const item of items) {
     if (!grouped[item.productNameSnapshot]) {
@@ -77,6 +95,32 @@ router.get('/top-products', requireAuth, requireRole('manager', 'admin', 'super_
 router.get('/cash-sessions', requireAuth, requireRole('manager', 'admin', 'super_admin'), async (req, res) => {
   const sessions = await CashSession.findAll({ order: [['openedAt', 'DESC']], limit: 50 });
   res.json(sessions);
+});
+
+/**
+ * Journal des operations sensibles. Lecture seule, reservee au gerant :
+ * c'est ce qui permet de voir qui annule, qui change les prix, et a quelle
+ * heure. Aucune route ne permet d'y ecrire autrement que par l'action
+ * elle-meme, ni d'en effacer une ligne.
+ */
+router.get('/audit', requireAuth, requireRole('manager', 'admin', 'super_admin'), async (req, res) => {
+  const { action, from, to } = req.query;
+  const where = {};
+
+  if (action) where.action = String(action);
+  if (from || to) {
+    where.createdAt = {};
+    if (from) where.createdAt[Op.gte] = new Date(String(from));
+    if (to) where.createdAt[Op.lte] = new Date(String(to));
+  }
+
+  const limit = Math.min(Number(req.query.limit) || 100, 300);
+  const entries = await AuditLog.findAll({
+    where,
+    order: [['createdAt', 'DESC']],
+    limit,
+  });
+  res.json(entries);
 });
 
 module.exports = router;

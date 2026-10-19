@@ -30,6 +30,39 @@ const STATEMENTS = [
   // La photo est stockee en data URL : 255 caracteres n'y suffisent pas.
   `ALTER TABLE products
      ALTER COLUMN "imageUrl" TYPE TEXT`,
+
+  // Epuise decide par le gerant ou la cuisine, par opposition au stock vide.
+  `ALTER TABLE products
+     ADD COLUMN IF NOT EXISTS "manuallyUnavailable" BOOLEAN NOT NULL DEFAULT false`,
+
+  // Journee commerciale : le numero affiche repart a 1 chaque matin.
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "orderDate" DATE`,
+  // Les commandes deja en base n'ont pas de journee : on la deduit de leur
+  // date de creation, sinon l'index unique ci-dessous les rejetterait en bloc.
+  `UPDATE orders
+      SET "orderDate" = ("createdAt" AT TIME ZONE 'UTC')::date
+    WHERE "orderDate" IS NULL`,
+  // L'historique a ete cree avec un compteur modulo 999 : des doublons y
+  // existent. On n'indexe donc que les commandes a partir d'aujourd'hui,
+  // sans toucher au passe, qui n'a pas a etre reecrit.
+  `CREATE UNIQUE INDEX IF NOT EXISTS orders_daily_number
+     ON orders ("orderDate", "orderNumber")
+     WHERE "orderDate" >= DATE '2026-10-19'`,
+
+  // Annulation d'une commande : motif, auteur, horodatage.
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "cancelReason" VARCHAR(255)`,
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "cancelledById" UUID`,
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "cancelledAt" TIMESTAMP WITH TIME ZONE`,
+
+  // Remise au stock apres annulation. Un type a part, et non un simple
+  // ajustement : le calcul du benefice net doit pouvoir deduire ce qui n'a
+  // finalement pas ete consomme, sans confondre avec une correction a la main.
+  `ALTER TYPE "enum_stock_movements_type"
+     ADD VALUE IF NOT EXISTS 'cancellation'`,
 ];
 
 async function runMigrations() {

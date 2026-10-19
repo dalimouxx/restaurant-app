@@ -8,6 +8,8 @@ const {
   OrderItem,
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { recomputeAvailability } = require('./stock.routes');
+const audit = require('../audit');
 
 const router = express.Router();
 
@@ -287,8 +289,21 @@ router.put('/:id', requireAuth, requireRole(...MANAGER), async (req, res) => {
       patch.categoryId = req.body.categoryId;
     }
 
+    const previousPrice = product.price;
     await product.update(patch);
     if (Array.isArray(req.body.recipe)) await replaceRecipe(product.id, req.body.recipe);
+
+    // Un prix qui bouge est l'operation la plus sensible de la carte :
+    // elle change ce que paient tous les clients suivants.
+    if (patch.price !== undefined && patch.price !== previousPrice) {
+      await audit.record(req, {
+        action: 'product.price_changed',
+        entityType: 'product',
+        entityId: product.id,
+        summary: `${product.name} : ${previousPrice.toFixed(3)} → ${patch.price.toFixed(3)} DT`,
+        details: { name: product.name, from: previousPrice, to: patch.price },
+      });
+    }
 
     res.json(product);
   } catch (err) {
@@ -296,8 +311,13 @@ router.put('/:id', requireAuth, requireRole(...MANAGER), async (req, res) => {
   }
 });
 
-/** Epuise / de nouveau disponible, d'un geste. La cuisine y a acces aussi :
- *  c'est elle qui constate la rupture, souvent en pleine affluence. */
+/**
+ * Epuise / de nouveau disponible, d'un geste. La cuisine y a acces aussi :
+ * c'est elle qui constate la rupture, souvent en pleine affluence.
+ *
+ * La decision est memorisee a part du stock : remettre un plat en vente ne
+ * garantit pas qu'il reparaisse, si les ingredients manquent reellement.
+ */
 router.post(
   '/:id/toggle-available',
   requireAuth,
@@ -305,8 +325,21 @@ router.post(
   async (req, res) => {
     const product = await Product.findByPk(req.params.id);
     if (!product) return res.status(404).json({ error: 'Plat introuvable.' });
-    product.isAvailable = !product.isAvailable;
+
+    const nowUnavailable = product.isAvailable;
+    product.manuallyUnavailable = nowUnavailable;
     await product.save();
+    await recomputeAvailability(product);
+
+    await audit.record(req, {
+      action: nowUnavailable ? 'product.marked_sold_out' : 'product.back_on_sale',
+      entityType: 'product',
+      entityId: product.id,
+      summary: nowUnavailable
+        ? `${product.name} déclaré épuisé`
+        : `${product.name} remis en vente`,
+    });
+
     res.json(product);
   }
 );
@@ -325,11 +358,25 @@ router.delete('/:id', requireAuth, requireRole(...MANAGER), async (req, res) => 
     await ProductOption.destroy({ where: { productId: product.id } });
     await ProductIngredient.destroy({ where: { productId: product.id } });
     await product.destroy();
+    await audit.record(req, {
+      action: 'product.deleted',
+      entityType: 'product',
+      entityId: product.id,
+      summary: `${product.name} supprimé (jamais vendu)`,
+      details: { name: product.name, price: product.price },
+    });
     return res.json({ ok: true, deleted: true });
   }
 
   product.isArchived = true;
   await product.save();
+  await audit.record(req, {
+    action: 'product.archived',
+    entityType: 'product',
+    entityId: product.id,
+    summary: `${product.name} retiré de la carte`,
+    details: { name: product.name, price: product.price, soldCount: sold },
+  });
   res.json({ ok: true, deleted: false, archived: true });
 });
 
@@ -442,18 +489,7 @@ router.delete('/options/:optionId', requireAuth, requireRole(...MANAGER), async 
   res.json({ ok: true });
 });
 
-/* ─────────── Disponibilite selon le stock ─────────── */
+// La verification de disponibilite selon le stock vit desormais dans
+// stock.routes.js (`stockAllows`), au plus pres des mouvements de stock.
 
-/** Verifie si un produit peut etre prepare avec le stock actuel. */
-async function checkAvailability(productId) {
-  const links = await ProductIngredient.findAll({ where: { productId } });
-  for (const link of links) {
-    const ingredient = await Ingredient.findByPk(link.ingredientId);
-    if (!ingredient || ingredient.quantityInStock < link.quantityNeeded) {
-      return false;
-    }
-  }
-  return true;
-}
-
-module.exports = { router, checkAvailability };
+module.exports = { router };

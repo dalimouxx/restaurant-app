@@ -34,6 +34,26 @@ router.post('/', requireAuth, requireRole('manager', 'admin', 'super_admin'), as
     return res.status(403).json({ error: "Seul un administrateur peut creer un gerant." });
   }
 
+  if (loginCode) {
+    const code = String(loginCode).trim();
+    if (!/^\d{4,8}$/.test(code)) {
+      return res.status(400).json({ error: 'Le code doit comporter de 4 a 8 chiffres.' });
+    }
+    /**
+     * Deux employes partageant un code, c'est la connexion qui en choisit
+     * un au hasard : les ventes seraient attribuees a la mauvaise personne,
+     * et une cloture de caisse deviendrait indefendable.
+     */
+    const taken = await User.findOne({ where: { loginCode: code } });
+    if (taken) {
+      return res.status(409).json({ error: 'Ce code est deja attribue a un autre employe.' });
+    }
+    // Un code court protege un acces a l'argent : on le dit, sans l'imposer.
+    if (code.length === 4 && ['manager', 'cashier'].includes(role)) {
+      console.warn(`Code a 4 chiffres pour un compte ${role} : 6 chiffres seraient plus surs.`);
+    }
+  }
+
   const user = await User.create({
     fullName,
     role,

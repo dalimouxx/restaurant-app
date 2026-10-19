@@ -36,6 +36,7 @@ import {
   useToast,
 } from '../../components/ui'
 import { NewOrderPanel } from './NewOrderPanel'
+import { TodayPanel } from './TodayPanel'
 import { usePrint } from '../../components/PrintHost'
 import { useAuth } from '../../lib/store'
 
@@ -156,6 +157,10 @@ function Register({
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [closing, setClosing] = useState(false)
   const [takingOrder, setTakingOrder] = useState(false)
+  /** Onglet de la colonne de gauche : la file, ou le service du jour. */
+  const [tab, setTab] = useState<'queue' | 'today'>('queue')
+  /** Incrémenté à chaque encaissement : l'historique se recharge. */
+  const [serviceVersion, setServiceVersion] = useState(0)
   const { notify } = useToast()
   const { print } = usePrint()
   const user = useAuth((s) => s.user)
@@ -245,6 +250,7 @@ function Register({
 
       setQueue((q) => q.filter((o) => o.id !== selected.id))
       setSelectedId(null)
+      setServiceVersion((v) => v + 1)
       load()
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Encaissement refusé.', 'error')
@@ -255,12 +261,19 @@ function Register({
     <div className="grid min-h-[calc(100dvh-4rem)] grid-cols-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
       {/* File */}
       <section className="flex min-h-0 flex-col border-ink-200 lg:border-r">
-        <div className="flex items-center justify-between gap-3 border-b border-ink-200 px-5 py-3.5">
-          <div className="flex items-baseline gap-2">
-            <h2 className="text-[15px] font-bold text-ink-900">File d'attente</h2>
-            <span className="num text-[13px] font-semibold text-ink-500">
-              {queue.length}
-            </span>
+        <div className="flex items-center justify-between gap-3 border-b border-ink-200 px-5 py-2.5">
+          <div className="flex gap-1">
+            <TabButton active={tab === 'queue'} onClick={() => setTab('queue')}>
+              À encaisser
+              {queue.length > 0 && (
+                <span className="num ml-1.5 rounded-full bg-petrol-600 px-1.5 text-[11px] text-white">
+                  {queue.length}
+                </span>
+              )}
+            </TabButton>
+            <TabButton active={tab === 'today'} onClick={() => setTab('today')}>
+              Aujourd'hui
+            </TabButton>
           </div>
           <button
             onClick={() => setClosing(true)}
@@ -271,19 +284,23 @@ function Register({
           </button>
         </div>
 
-        <div className="border-b border-ink-200 p-3">
-          <Button
-            size="lg"
-            icon={PlusCircle}
-            className="w-full"
-            onClick={() => setTakingOrder(true)}
-          >
-            Prendre une commande
-          </Button>
-        </div>
+        {tab === 'queue' && (
+          <div className="border-b border-ink-200 p-3">
+            <Button
+              size="lg"
+              icon={PlusCircle}
+              className="w-full"
+              onClick={() => setTakingOrder(true)}
+            >
+              Prendre une commande
+            </Button>
+          </div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {loading ? (
+          {tab === 'today' ? (
+            <TodayPanel reloadKey={serviceVersion} />
+          ) : loading ? (
             <div className="space-y-2 p-4">
               {[0, 1, 2].map((i) => (
                 <Skeleton key={i} className="h-[72px]" />
@@ -395,6 +412,27 @@ function Register({
         }}
       />
     </div>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center rounded-[7px] px-2.5 py-1.5 text-[13.5px] font-bold transition-colors ${
+        active ? 'bg-ink-100 text-ink-900' : 'text-ink-500 hover:text-ink-900'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 

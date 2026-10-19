@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Package,
   Receipt,
+  ScrollText,
   Settings,
   UtensilsCrossed,
   Users,
@@ -35,6 +36,7 @@ const TeamPage = lazy(() => import('./screens/manager/TeamPage'))
 const CashSessionsPage = lazy(() => import('./screens/manager/CashSessionsPage'))
 const SettingsPage = lazy(() => import('./screens/manager/SettingsPage'))
 const MenuPage = lazy(() => import('./screens/manager/MenuPage'))
+const JournalPage = lazy(() => import('./screens/manager/JournalPage'))
 
 function Loading() {
   return (
@@ -86,6 +88,7 @@ const MANAGER_NAV: NavItem[] = [
   { to: '/gestion/stock', label: 'Stock', icon: Package },
   { to: '/gestion/equipe', label: 'Équipe', icon: Users },
   { to: '/gestion/caisses', label: 'Caisses', icon: Wallet },
+  { to: '/gestion/journal', label: 'Journal', icon: ScrollText },
   { to: '/gestion/reglages', label: 'Réglages', icon: Settings },
 ]
 
@@ -234,6 +237,20 @@ export default function App() {
                   subtitle="Ouvertures, clôtures et écarts"
                 >
                   <CashSessionsPage />
+                </ManagerShell>
+              </Guard>
+            }
+          />
+
+          <Route
+            path="/gestion/journal"
+            element={
+              <Guard allow={STAFF_PLUS} intent="manager">
+                <ManagerShell
+                  title="Journal"
+                  subtitle="Annulations, changements de prix, écarts de caisse"
+                >
+                  <JournalPage />
                 </ManagerShell>
               </Guard>
             }

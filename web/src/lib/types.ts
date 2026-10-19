@@ -102,9 +102,31 @@ export interface OrderItem {
   customization: ItemCustomization
 }
 
+/** Motif d'annulation prédéfini : le caissier choisit, il n'écrit pas. */
+export interface CancelReason {
+  code: string
+  label: string
+}
+
+/** Une ligne du registre des opérations sensibles. */
+export interface AuditEntry {
+  id: string
+  userId?: string | null
+  userName: string
+  userRole: string
+  action: string
+  entityType?: string | null
+  entityId?: string | null
+  summary: string
+  details?: Record<string, unknown> | null
+  createdAt: string
+}
+
 export interface Order {
   id: string
   orderNumber: number
+  /** Journée commerciale : le numéro repart à 1 chaque matin. */
+  orderDate?: string | null
   source: OrderSource
   fulfillmentType: FulfillmentType
   status: OrderStatus
@@ -121,6 +143,9 @@ export interface Order {
   deliveryLat?: number | null
   deliveryLng?: number | null
   qrToken?: string | null
+  cancelReason?: string | null
+  cancelledById?: string | null
+  cancelledAt?: string | null
   createdAt: string
   updatedAt: string
   items?: OrderItem[]

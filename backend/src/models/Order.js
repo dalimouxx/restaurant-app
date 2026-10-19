@@ -5,6 +5,11 @@ const Order = sequelize.define('Order', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   orderNumber: { type: DataTypes.INTEGER, allowNull: false }, // numero court affiche (#042)
 
+  /** Journee commerciale au fuseau du restaurant, figee a la creation.
+   *  Porte la numerotation : le numero repart a 1 chaque matin, et le
+   *  couple (journee, numero) est unique. */
+  orderDate: { type: DataTypes.DATEONLY, allowNull: true },
+
   source: {
     // d'ou vient la commande
     type: DataTypes.ENUM('kiosk', 'counter', 'online'),
@@ -55,6 +60,16 @@ const Order = sequelize.define('Order', {
   deliveryLng: { type: DataTypes.FLOAT },
 
   qrToken: { type: DataTypes.STRING }, // QR scanne par le livreur pour confirmer la remise
+
+  /**
+   * Annulation. Une commande ne se supprime jamais : elle garde son numero
+   * et sa place dans la suite, et porte la trace de qui l'a annulee et
+   * pourquoi. Un trou dans la numerotation serait le premier signe qu'on
+   * cherche en cas de controle.
+   */
+  cancelReason: { type: DataTypes.STRING, allowNull: true },
+  cancelledById: { type: DataTypes.UUID, allowNull: true },
+  cancelledAt: { type: DataTypes.DATE, allowNull: true },
 }, {
   tableName: 'orders',
   timestamps: true,

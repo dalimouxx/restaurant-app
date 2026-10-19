@@ -1,4 +1,6 @@
 import type {
+  AuditEntry,
+  CancelReason,
   CartLine,
   CashSession,
   Category,
@@ -341,6 +343,12 @@ export const orders = {
 
   byId: (id: string) => request<Order>(`/orders/${id}`),
   forCustomer: (customerId: string) => request<Order[]>(`/orders/customer/${customerId}`),
+
+  /** Commandes de la journée : réimpression d'un reçu, rattrapage d'une erreur. */
+  recent: () => request<Order[]>('/orders/recent'),
+  cancelReasons: () => request<CancelReason[]>('/orders/cancel-reasons'),
+  cancel: (id: string, reason: string) =>
+    request<Order>(`/orders/${id}/cancel`, { method: 'POST', body: { reason } }),
 }
 
 /* ─────────── Caisse ─────────── */
@@ -403,6 +411,15 @@ export const reports = {
     return request<NetProfitReport>(`/reports/net-profit${q ? `?${q}` : ''}`)
   },
   topProducts: () => request<TopProduct[]>('/reports/top-products'),
+
+  /** Registre des opérations sensibles, en lecture seule. */
+  audit: (filters: { action?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams()
+    if (filters.action) p.set('action', filters.action)
+    if (filters.limit) p.set('limit', String(filters.limit))
+    const q = p.toString()
+    return request<AuditEntry[]>(`/reports/audit${q ? `?${q}` : ''}`)
+  },
   lowStock: () => request<Ingredient[]>('/reports/low-stock'),
   cashSessions: () => request<CashSession[]>('/reports/cash-sessions'),
 }
