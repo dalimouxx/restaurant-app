@@ -50,15 +50,34 @@ async function run() {
   // en reutilisant le meme secret que le serveur (charge depuis le meme .env).
   require('dotenv').config({ path: __dirname + '/../.env' });
   const jwt = require('jsonwebtoken');
+
+/** Semaine entierement ouverte : les tests ne dependent pas de l'heure. */
+function toujoursOuvert() {
+  return Object.fromEntries(
+    ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [
+      d, { open: '00:00', close: '23:59', closed: false },
+    ])
+  );
+}
   const driver1Token = jwt.sign({ id: d1.data.user.id, role: 'driver', fullName: 'Livreur A' }, process.env.JWT_SECRET, { expiresIn: '1h' });
   const driver2Token = jwt.sign({ id: d2.data.user.id, role: 'driver', fullName: 'Livreur B' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
   // 3. Creer une commande en ligne avec livraison, la payer, et la faire passer "ready"
+
+/**
+ * Une livraison exige desormais une zone : les frais ne sont plus ecrits
+ * dans le code. On ouvre aussi le restaurant, sinon la commande en ligne
+ * est refusee hors des heures de service.
+ */
+  await req('PUT', '/settings', { openingHours: toujoursOuvert() }, managerToken);
+  const zoneLivraison = (await req('GET', '/zones')).data[0];
+
   const order = await req('POST', '/orders/online', {
     items: [{ productId: margherita.id, quantity: 1 }],
     fulfillmentType: 'delivery',
     deliveryAddress: 'Adresse test course',
     deliveryLat: 35.6, deliveryLng: 10.1,
+    deliveryZoneId: zoneLivraison.id,
   }, driver1Token); // on utilise un token "customer-like" ; le role driver n'empeche pas de commander ici
 
   await req('POST', `/orders/${order.data.id}/pay`, { paymentMethod: 'cash_on_delivery' }, cashierToken);

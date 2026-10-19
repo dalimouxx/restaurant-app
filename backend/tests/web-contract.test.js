@@ -212,6 +212,15 @@ async function run() {
   )
 
   console.log('\n— Parcours livraison —')
+  /**
+   * Une livraison exige desormais une zone : les frais ne sont plus ecrits
+   * dans le code. On ouvre aussi le restaurant, sinon la commande en ligne
+   * est refusee hors des heures de service.
+   */
+  await req('PUT', '/settings', { openingHours: toujoursOuvert() }, adminToken)
+  const zoneLivraison = (await req('GET', '/zones')).data[0]
+  check(!!zoneLivraison, 'Une zone de livraison est proposee au client')
+
   const suffix = Date.now().toString().slice(-6)
   const driver = await req(
     'POST',
@@ -239,6 +248,7 @@ async function run() {
       deliveryAddress: '5 Av. Habib Bourguiba, Gabès',
       deliveryLat: 33.8815,
       deliveryLng: 10.0982,
+      deliveryZoneId: zoneLivraison.id,
     },
     customerToken,
   )
@@ -305,3 +315,12 @@ run().catch((e) => {
   console.error('Erreur:', e)
   process.exit(1)
 })
+
+/** Semaine entierement ouverte : les tests ne dependent pas de l'heure. */
+function toujoursOuvert() {
+  return Object.fromEntries(
+    ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [
+      d, { open: '00:00', close: '23:59', closed: false },
+    ])
+  );
+}

@@ -5,6 +5,15 @@ const { Client } = require('pg');
 require('dotenv').config({ path: __dirname + '/../.env' });
 const jwt = require('jsonwebtoken');
 
+/** Semaine entierement ouverte : les tests ne dependent pas de l'heure. */
+function toujoursOuvert() {
+  return Object.fromEntries(
+    ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [
+      d, { open: '00:00', close: '23:59', closed: false },
+    ])
+  );
+}
+
 const BASE = 'http://localhost:4000/api';
 let pass = 0, fail = 0;
 
@@ -63,11 +72,21 @@ async function run() {
   const products = await req('GET', '/products');
   const pizza = products.data.find((p) => p.name === 'Pizza Margherita');
 
+
+/**
+ * Une livraison exige desormais une zone : les frais ne sont plus ecrits
+ * dans le code. On ouvre aussi le restaurant, sinon la commande en ligne
+ * est refusee hors des heures de service.
+ */
+  await req('PUT', '/settings', { openingHours: toujoursOuvert() }, managerToken);
+  const zoneLivraison = (await req('GET', '/zones')).data[0];
+
   const order = await req('POST', '/orders/online', {
     items: [{ productId: pizza.id, quantity: 2 }],
     fulfillmentType: 'delivery',
     deliveryAddress: '5 Avenue Habib Bourguiba, Kairouan',
     deliveryLat: 35.6781, deliveryLng: 10.0963,
+    deliveryZoneId: zoneLivraison.id,
   }, customerToken);
 
   check(order.status === 201, 'Le client passe une commande en livraison');

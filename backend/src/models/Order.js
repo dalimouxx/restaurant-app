@@ -55,6 +55,14 @@ const Order = sequelize.define('Order', {
   },
   paidAt: { type: DataTypes.DATE, allowNull: true },
 
+  /** Contact, pour appeler quand c'est pret. Facultatif sur place,
+   *  utile a emporter, indispensable en livraison. */
+  customerName: { type: DataTypes.STRING, allowNull: true },
+  customerPhone: { type: DataTypes.STRING, allowNull: true },
+
+  /** Zone retenue : c'est elle qui a fixe les frais de livraison. */
+  deliveryZoneId: { type: DataTypes.UUID, allowNull: true },
+
   deliveryAddress: { type: DataTypes.STRING },
   deliveryLat: { type: DataTypes.FLOAT },
   deliveryLng: { type: DataTypes.FLOAT },

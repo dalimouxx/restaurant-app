@@ -58,6 +58,14 @@ const STATEMENTS = [
   `ALTER TABLE orders
      ADD COLUMN IF NOT EXISTS "cancelledAt" TIMESTAMP WITH TIME ZONE`,
 
+  // Contact du client et zone de livraison retenue.
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "customerName" VARCHAR(255)`,
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "customerPhone" VARCHAR(255)`,
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "deliveryZoneId" UUID`,
+
   // Remise au stock apres annulation. Un type a part, et non un simple
   // ajustement : le calcul du benefice net doit pouvoir deduire ce qui n'a
   // finalement pas ete consomme, sans confondre avec une correction a la main.

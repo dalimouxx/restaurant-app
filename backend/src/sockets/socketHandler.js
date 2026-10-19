@@ -24,6 +24,13 @@ const STAFF = ['manager', 'admin', 'super_admin'];
 
 /** Qui a le droit d'entrer dans quelle salle. */
 const ROOMS = [
+  /**
+   * Ecran mural des commandes pretes. Seule salle ouverte a tous : elle ne
+   * transporte qu'un numero de commande, ce que la salle entiere lit deja
+   * sur l'ecran. Exiger un compte obligerait a laisser une session de
+   * caissier ouverte sur un ecran accroche au mur.
+   */
+  { pattern: /^board$/, public: true },
   { pattern: /^kitchen$/, roles: ['cook', ...STAFF] },
   { pattern: /^cashier$/, roles: ['cashier', ...STAFF] },
   { pattern: /^manager$/, roles: STAFF },
@@ -47,6 +54,7 @@ function identify(socket) {
 async function mayJoin(user, room) {
   const rule = ROOMS.find((r) => r.pattern.test(room));
   if (!rule) return false; // salle inconnue : on n'ouvre rien par defaut
+  if (rule.public) return true;
   if (!user) return false;
 
   const id = room.match(rule.pattern)?.[1];
@@ -154,6 +162,17 @@ function emitDeliveryTaken(orderId, driverId) {
   getIo().to('drivers').emit('delivery:taken', { orderId, driverId });
 }
 
+/**
+ * Ecran mural : rien que le numero et son etat. Pas de montant, pas de
+ * plats, pas de nom — l'ecran est vu par toute la salle.
+ */
+function emitBoard(order) {
+  getIo().to('board').emit('board:updated', {
+    orderNumber: order.orderNumber,
+    status: order.status,
+  });
+}
+
 function emitStockAlert(ingredient) {
   getIo().to('manager').emit('stock:low_alert', ingredient);
 }
@@ -166,4 +185,5 @@ module.exports = {
   emitDeliveryAvailable,
   emitDeliveryTaken,
   emitStockAlert,
+  emitBoard,
 };

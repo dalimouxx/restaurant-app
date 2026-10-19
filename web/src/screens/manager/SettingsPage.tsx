@@ -11,6 +11,8 @@ import {
   Skeleton,
   useToast,
 } from '../../components/ui'
+import { OpeningHoursCard } from './OpeningHoursCard'
+import { DeliveryZonesCard } from './DeliveryZonesCard'
 
 /**
  * Informations de l'établissement. Elles figurent en tête de chaque reçu,
@@ -54,7 +56,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-3xl space-y-7 px-4 py-6 sm:px-6">
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
         <div>
           <SectionTitle>Établissement</SectionTitle>
@@ -143,6 +145,14 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      <OpeningHoursCard
+        hours={form.openingHours}
+        opening={form.opening}
+        onChange={(openingHours) => set('openingHours', openingHours)}
+      />
+
+      <DeliveryZonesCard />
     </div>
   )
 }

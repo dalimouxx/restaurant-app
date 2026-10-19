@@ -37,6 +37,7 @@ const CashSessionsPage = lazy(() => import('./screens/manager/CashSessionsPage')
 const SettingsPage = lazy(() => import('./screens/manager/SettingsPage'))
 const MenuPage = lazy(() => import('./screens/manager/MenuPage'))
 const JournalPage = lazy(() => import('./screens/manager/JournalPage'))
+const BoardScreen = lazy(() => import('./screens/board/BoardScreen'))
 
 function Loading() {
   return (
@@ -138,6 +139,10 @@ export default function App() {
 
           {/* Borne en libre-service : aucune connexion */}
           <Route path="/borne" element={<KioskScreen />} />
+
+          {/* Écran mural des commandes prêtes : aucune connexion non plus,
+              il n'affiche que des numéros. */}
+          <Route path="/ecran" element={<BoardScreen />} />
 
           {/* Caisse */}
           <Route

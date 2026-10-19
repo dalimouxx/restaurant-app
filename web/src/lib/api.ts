@@ -1,9 +1,11 @@
 import type {
   AuditEntry,
+  BoardEntry,
   CancelReason,
   CartLine,
   CashSession,
   Category,
+  DeliveryZone,
   DriverStats,
   Ingredient,
   NetProfitReport,
@@ -311,25 +313,44 @@ export const orders = {
     }),
 
   /** Prise de commande au comptoir, par le caissier. */
-  createAtCounter: (lines: CartLine[], fulfillmentType: 'dine_in' | 'pickup') =>
+  createAtCounter: (
+    lines: CartLine[],
+    fulfillmentType: 'dine_in' | 'pickup',
+    contact?: { customerName?: string; customerPhone?: string },
+  ) =>
     request<Order>('/orders/counter', {
       method: 'POST',
-      body: { items: toItemsPayload(lines), fulfillmentType },
+      body: {
+        items: toItemsPayload(lines),
+        fulfillmentType,
+        customerName: contact?.customerName,
+        customerPhone: contact?.customerPhone,
+      },
     }),
 
   createOnline: (
     lines: CartLine[],
     fulfillmentType: 'pickup' | 'delivery',
-    delivery?: { address: string; lat?: number; lng?: number },
+    extra?: {
+      address?: string
+      lat?: number
+      lng?: number
+      zoneId?: string
+      customerName?: string
+      customerPhone?: string
+    },
   ) =>
     request<Order>('/orders/online', {
       method: 'POST',
       body: {
         items: toItemsPayload(lines),
         fulfillmentType,
-        deliveryAddress: delivery?.address,
-        deliveryLat: delivery?.lat,
-        deliveryLng: delivery?.lng,
+        deliveryAddress: extra?.address,
+        deliveryLat: extra?.lat,
+        deliveryLng: extra?.lng,
+        deliveryZoneId: extra?.zoneId,
+        customerName: extra?.customerName,
+        customerPhone: extra?.customerPhone,
       },
     }),
 
@@ -346,6 +367,9 @@ export const orders = {
 
   /** Commandes de la journée : réimpression d'un reçu, rattrapage d'une erreur. */
   recent: () => request<Order[]>('/orders/recent'),
+
+  /** Écran mural : lecture publique, numéros seulement. */
+  board: () => request<BoardEntry[]>('/orders/board', { auth: false }),
   cancelReasons: () => request<CancelReason[]>('/orders/cancel-reasons'),
   cancel: (id: string, reason: string) =>
     request<Order>(`/orders/${id}/cancel`, { method: 'POST', body: { reason } }),
@@ -422,6 +446,18 @@ export const reports = {
   },
   lowStock: () => request<Ingredient[]>('/reports/low-stock'),
   cashSessions: () => request<CashSession[]>('/reports/cash-sessions'),
+}
+
+/* ─────────── Zones de livraison ─────────── */
+
+export const zones = {
+  list: () => request<DeliveryZone[]>('/zones', { auth: false }),
+  all: () => request<DeliveryZone[]>('/zones/all'),
+  create: (body: Partial<DeliveryZone>) =>
+    request<DeliveryZone>('/zones', { method: 'POST', body }),
+  update: (id: string, body: Partial<DeliveryZone>) =>
+    request<DeliveryZone>(`/zones/${id}`, { method: 'PUT', body }),
+  disable: (id: string) => request<{ ok: true }>(`/zones/${id}`, { method: 'DELETE' }),
 }
 
 /* ─────────── Réglages de l'établissement ─────────── */

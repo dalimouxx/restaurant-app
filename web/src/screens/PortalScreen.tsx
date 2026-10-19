@@ -6,6 +6,7 @@ import {
   Monitor,
   Receipt,
   ShoppingBag,
+  Tv,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../lib/store'
@@ -80,6 +81,13 @@ export default function PortalScreen() {
           >
             <Monitor size={19} strokeWidth={2.2} />
             Mode borne
+          </Link>
+          <Link
+            to="/ecran"
+            className="inline-flex h-14 items-center gap-2.5 rounded-[11px] border border-ink-700 px-7 text-[16px] font-bold text-ink-200 transition-colors hover:border-ink-600 hover:bg-ink-800"
+          >
+            <Tv size={19} strokeWidth={2.2} />
+            Écran de salle
           </Link>
         </div>
 

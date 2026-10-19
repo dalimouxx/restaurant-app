@@ -1,12 +1,13 @@
 const express = require('express');
 const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
-const { Order, OrderItem, Product, ProductOption, User } = require('../models');
+const { Order, OrderItem, Product, ProductOption, DeliveryZone } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { deductStockForOrderItems, restoreStockForOrderItems } = require('./stock.routes');
 const socket = require('../sockets/socketHandler');
 const audit = require('../audit');
-const { badRequest } = require('../errors');
+const { badRequest, HttpError } = require('../errors');
+const { getSettings } = require('../models/Setting');
 const { throttle } = require('../middleware/rateLimit');
 
 const router = express.Router();
@@ -90,6 +91,9 @@ router.post(
       fulfillmentType: fulfillmentType || 'dine_in',
       status: 'awaiting_payment',
       cashierId: req.user.id,
+      // Pour rappeler le client quand c'est pret, a emporter surtout.
+      customerName: req.body.customerName,
+      customerPhone: req.body.customerPhone,
     });
 
     socket.emitNewKitchenTicket(order);
@@ -97,11 +101,41 @@ router.post(
   }
 );
 
-// --- Creation d'une commande en ligne (app mobile), avec choix retrait/livraison ---
+// --- Creation d'une commande en ligne, avec choix retrait/livraison ---
 router.post('/online', requireAuth, async (req, res) => {
-  const { items, fulfillmentType, deliveryAddress, deliveryLat, deliveryLng } = req.body;
+  const {
+    items, fulfillmentType, deliveryAddress, deliveryLat, deliveryLng,
+    deliveryZoneId, customerName, customerPhone,
+  } = req.body;
 
-  const DELIVERY_FEE = 7; // a rendre configurable via l'app super admin plus tard
+  /**
+   * Hors des heures d'ouverture, on refuse ici et pas seulement dans le
+   * navigateur : un onglet laisse ouvert depuis la veille passerait
+   * commande a 3 h du matin, et c'est le restaurant qui s'excuserait.
+   */
+  const { opening } = await getSettings();
+  if (!opening.open) {
+    throw new HttpError(
+      409,
+      opening.opensAt
+        ? `Le restaurant est fermé. Commandes à partir de ${opening.opensAt}${opening.opensDay ? ` ${opening.opensDay}` : ''}.`
+        : 'Le restaurant est fermé pour le moment.'
+    );
+  }
+
+  let deliveryFee = 0;
+  let zone = null;
+
+  if (fulfillmentType === 'delivery') {
+    if (!deliveryAddress || String(deliveryAddress).trim().length < 5) {
+      throw badRequest('Adresse de livraison requise.');
+    }
+    zone = deliveryZoneId
+      ? await DeliveryZone.findOne({ where: { id: deliveryZoneId, isActive: true } })
+      : null;
+    if (!zone) throw badRequest('Choisissez votre zone de livraison.');
+    deliveryFee = zone.fee;
+  }
 
   const order = await createOrderWithItems({
     items,
@@ -109,10 +143,16 @@ router.post('/online', requireAuth, async (req, res) => {
     fulfillmentType,
     status: 'awaiting_payment',
     customerId: req.user.id,
+    customerName,
+    customerPhone,
     deliveryAddress,
     deliveryLat,
     deliveryLng,
-    deliveryFee: fulfillmentType === 'delivery' ? DELIVERY_FEE : 0,
+    deliveryZoneId: zone?.id ?? null,
+    deliveryFee,
+    // Le minimum de la zone porte sur les plats, jamais sur les frais.
+    minimumOrder: zone?.minimumOrder ?? 0,
+    zoneName: zone?.name,
   });
 
   res.status(201).json(order);
@@ -121,7 +161,9 @@ router.post('/online', requireAuth, async (req, res) => {
 async function createOrderWithItems(opts) {
   const {
     items, source, fulfillmentType, status, customerId,
-    deliveryAddress, deliveryLat, deliveryLng, deliveryFee = 0,
+    customerName, customerPhone,
+    deliveryAddress, deliveryLat, deliveryLng, deliveryZoneId,
+    deliveryFee = 0, minimumOrder = 0, zoneName,
   } = opts;
 
   let subtotal = 0;
@@ -180,6 +222,13 @@ async function createOrderWithItems(opts) {
     });
   }
 
+  if (minimumOrder > 0 && subtotal < minimumOrder) {
+    throw badRequest(
+      `Minimum de ${minimumOrder.toFixed(3)} DT pour livrer${zoneName ? ` à ${zoneName}` : ''}. ` +
+      `Votre commande est à ${subtotal.toFixed(3)} DT.`
+    );
+  }
+
   const orderDate = businessDay();
 
   // Deux commandes prises dans la meme seconde peuvent viser le meme
@@ -196,12 +245,15 @@ async function createOrderWithItems(opts) {
         status,
         customerId,
         cashierId: opts.cashierId ?? null,
+        customerName: customerName ? String(customerName).trim().slice(0, 80) : null,
+        customerPhone: customerPhone ? String(customerPhone).trim().slice(0, 30) : null,
         subtotal,
         deliveryFee,
         totalAmount: subtotal + deliveryFee,
         deliveryAddress,
         deliveryLat,
         deliveryLng,
+        deliveryZoneId: deliveryZoneId ?? null,
         qrToken: uuidv4(),
       });
     } catch (err) {
@@ -267,8 +319,32 @@ router.post('/:id/pay', requireAuth, requireRole('cashier', 'manager', 'admin', 
 
   socket.emitOrderStatusChanged(order);
   socket.emitNewKitchenTicket(order);
+  socket.emitBoard(order);
 
   res.json(order);
+});
+
+/**
+ * Écran mural des commandes prêtes.
+ *
+ * Public, et volontairement avare : numéro, état, heure. Aucun montant,
+ * aucun plat, aucun nom — tout ce qui s'affiche là est lu par la salle
+ * entière, et souvent photographié.
+ */
+router.get('/board', async (req, res) => {
+  const orders = await Order.findAll({
+    where: { status: ['in_kitchen', 'preparing', 'ready'], orderDate: businessDay() },
+    attributes: ['orderNumber', 'status', 'updatedAt'],
+    order: [['updatedAt', 'ASC']],
+    limit: 40,
+  });
+  res.json(
+    orders.map((o) => ({
+      orderNumber: o.orderNumber,
+      status: o.status,
+      since: o.updatedAt,
+    }))
+  );
 });
 
 /* ─────────── Annulation ─────────── */
@@ -411,6 +487,7 @@ router.post('/:id/kitchen-status', requireAuth, requireRole('cook', 'manager', '
   }
 
   socket.emitOrderStatusChanged(order);
+  socket.emitBoard(order);
   res.json(order);
 });
 

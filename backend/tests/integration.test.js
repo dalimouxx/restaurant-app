@@ -100,11 +100,21 @@ async function run() {
   assert(customerReg.status === 201, 'Inscription client reussie');
   const customerToken = customerReg.data.token;
 
+
+/**
+ * Une livraison exige desormais une zone : les frais ne sont plus ecrits
+ * dans le code. On ouvre aussi le restaurant, sinon la commande en ligne
+ * est refusee hors des heures de service.
+ */
+  await req('PUT', '/settings', { openingHours: toujoursOuvert() }, managerToken);
+  const zoneLivraison = (await req('GET', '/zones')).data[0];
+
   const onlineOrder = await req('POST', '/orders/online', {
     items: [{ productId: margherita.id, quantity: 1 }],
     fulfillmentType: 'delivery',
     deliveryAddress: '12 Rue Test, Kairouan',
     deliveryLat: 35.67, deliveryLng: 10.10,
+    deliveryZoneId: zoneLivraison.id,
   }, customerToken);
   assert(onlineOrder.status === 201, 'Commande en ligne avec livraison creee');
   assert(onlineOrder.data.deliveryFee === 7, 'Frais de livraison ajoutes automatiquement (7)');
@@ -136,3 +146,12 @@ run().catch((err) => {
   console.error('Erreur pendant les tests:', err);
   process.exit(1);
 });
+
+/** Semaine entierement ouverte : les tests ne dependent pas de l'heure. */
+function toujoursOuvert() {
+  return Object.fromEntries(
+    ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [
+      d, { open: '00:00', close: '23:59', closed: false },
+    ])
+  );
+}

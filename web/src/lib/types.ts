@@ -143,6 +143,9 @@ export interface Order {
   deliveryLat?: number | null
   deliveryLng?: number | null
   qrToken?: string | null
+  customerName?: string | null
+  customerPhone?: string | null
+  deliveryZoneId?: string | null
   cancelReason?: string | null
   cancelledById?: string | null
   cancelledAt?: string | null
@@ -194,6 +197,23 @@ export interface DriverStats {
   }[]
 }
 
+/** Horaires d'un jour. Une fermeture avant l'ouverture passe minuit. */
+export interface DayHours {
+  open: string
+  close: string
+  closed: boolean
+}
+
+export type WeekDay = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+
+/** État d'ouverture calculé par le serveur : personne ne le refait. */
+export interface OpeningState {
+  open: boolean
+  opensAt: string | null
+  opensDay?: string | null
+  dayLabel?: string
+}
+
 /** Informations de l'établissement, imprimées sur les tickets. */
 export interface Settings {
   restaurantName: string
@@ -202,6 +222,26 @@ export interface Settings {
   taxId: string
   ticketFooter: string
   currency: string
+  openingHours: Record<WeekDay, DayHours>
+  opening: OpeningState
+}
+
+/** Zone de livraison : un quartier, un tarif. */
+export interface DeliveryZone {
+  id: string
+  name: string
+  fee: number
+  minimumOrder: number
+  estimatedMinutes: number
+  isActive: boolean
+  displayOrder: number
+}
+
+/** Ligne de l'écran mural : rien que le numéro et son état. */
+export interface BoardEntry {
+  orderNumber: number
+  status: OrderStatus
+  since: string
 }
 
 /** Article du panier, côté navigateur uniquement. */

@@ -220,4 +220,25 @@ async function bootstrapDemoMenu() {
   return { created: true, products: 5, categories: 3, ingredients: 10 };
 }
 
-module.exports = { bootstrapAdmin, bootstrapDemoMenu };
+/**
+ * Premiere zone de livraison.
+ *
+ * Les frais etaient auparavant ecrits en dur a 7 DT. Sans zone, la
+ * livraison serait refusee des la mise a jour : on reprend donc l'ancien
+ * tarif tel quel, a charge pour le gerant de decouper sa ville ensuite.
+ */
+async function bootstrapDeliveryZone() {
+  const { DeliveryZone } = require('./models');
+  if ((await DeliveryZone.count()) > 0) return { created: false };
+
+  await DeliveryZone.create({
+    name: 'Toute la ville',
+    fee: 7,
+    minimumOrder: 0,
+    estimatedMinutes: 30,
+    displayOrder: 0,
+  });
+  return { created: true };
+}
+
+module.exports = { bootstrapAdmin, bootstrapDemoMenu, bootstrapDeliveryZone };

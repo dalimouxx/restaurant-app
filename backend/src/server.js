@@ -18,7 +18,7 @@ const fs = require('fs');
 
 const { sequelize } = require('./models');
 const socket = require('./sockets/socketHandler');
-const { bootstrapAdmin, bootstrapDemoMenu } = require('./bootstrap');
+const { bootstrapAdmin, bootstrapDemoMenu, bootstrapDeliveryZone } = require('./bootstrap');
 const { runMigrations } = require('./migrations');
 
 const authRoutes = require('./routes/auth.routes');
@@ -30,6 +30,7 @@ const deliveryRoutes = require('./routes/delivery.routes');
 const reportRoutes = require('./routes/report.routes');
 const userRoutes = require('./routes/user.routes');
 const settingsRoutes = require('./routes/settings.routes');
+const zoneRoutes = require('./routes/zone.routes');
 
 const app = express();
 
@@ -144,6 +145,7 @@ app.use('/api/delivery', deliveryRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/zones', zoneRoutes);
 
 /**
  * Application web (build Vite).
@@ -289,6 +291,10 @@ async function start() {
           '=================================================='
       );
     }
+
+    // Reprend l'ancien tarif unique si aucune zone n'existe encore.
+    const zone = await bootstrapDeliveryZone();
+    if (zone.created) console.log('Zone de livraison par defaut creee (7 DT).');
 
     // Carte de démonstration, si demandée et si la carte est vide.
     const demo = await bootstrapDemoMenu();

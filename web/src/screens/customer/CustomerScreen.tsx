@@ -9,10 +9,16 @@ import {
   Store,
   UtensilsCrossed,
 } from 'lucide-react'
-import { auth, catalog, orders } from '../../lib/api'
+import { auth, catalog, orders, settingsApi, zones as zonesApi } from '../../lib/api'
 import { lineUnitPrice, useAuth, useCustomerCart } from '../../lib/store'
 import { moneyDT } from '../../lib/format'
-import type { Category, Product, ProductOption } from '../../lib/types'
+import type {
+  Category,
+  DeliveryZone,
+  OpeningState,
+  Product,
+  ProductOption,
+} from '../../lib/types'
 import {
   Button,
   Card,
@@ -27,7 +33,6 @@ import { Wordmark } from '../../components/Shell'
 import { LineOptions, OptionPicker } from '../../components/OptionPicker'
 
 /** Indicatif : le montant réel est toujours recalculé par le serveur. */
-const DELIVERY_FEE_HINT = 7
 
 export default function CustomerScreen() {
   const [categories, setCategories] = useState<Category[]>([])
@@ -36,6 +41,7 @@ export default function CustomerScreen() {
   const [loading, setLoading] = useState(true)
   const [checkout, setCheckout] = useState(false)
   const [picking, setPicking] = useState<Product | null>(null)
+  const [opening, setOpening] = useState<OpeningState | null>(null)
 
   const cart = useCustomerCart()
   const { notify } = useToast()
@@ -56,6 +62,12 @@ export default function CustomerScreen() {
 
   useEffect(() => {
     load()
+    // L'etat d'ouverture est calcule par le serveur : l'horloge du
+    // telephone du client n'a pas voix au chapitre.
+    settingsApi
+      .get()
+      .then((s) => setOpening(s.opening))
+      .catch(() => setOpening(null))
   }, [load])
 
   const visible = useMemo(
@@ -78,6 +90,23 @@ export default function CustomerScreen() {
           </button>
         </div>
       </header>
+
+      {opening && !opening.open && (
+        <div className="border-b border-saffron-500/35 bg-saffron-50 px-4 py-3 text-center sm:px-6">
+          <p className="text-[13.5px] leading-snug font-semibold text-saffron-700">
+            Nous sommes fermés pour le moment.
+            {opening.opensAt && (
+              <>
+                {' '}Réouverture {opening.opensDay} à{' '}
+                <span className="num">{opening.opensAt}</span>.
+              </>
+            )}
+          </p>
+          <p className="mt-0.5 text-[12.5px] text-saffron-700/80">
+            Vous pouvez composer votre commande, elle sera acceptée à l'ouverture.
+          </p>
+        </div>
+      )}
 
       <div className="mx-auto max-w-3xl px-4">
         <div className="py-6">
@@ -205,6 +234,9 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
   const user = useAuth((s) => s.user)
   const [mode, setMode] = useState<'pickup' | 'delivery'>('pickup')
   const [address, setAddress] = useState('')
+  const [zoneList, setZoneList] = useState<DeliveryZone[]>([])
+  const [zoneId, setZoneId] = useState<string>('')
+  const [phone, setPhone] = useState(user?.phone ?? '')
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [locating, setLocating] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -212,7 +244,23 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { notify } = useToast()
   const navigate = useNavigate()
 
-  const fee = mode === 'delivery' ? DELIVERY_FEE_HINT : 0
+  const zone = zoneList.find((z) => z.id === zoneId) ?? null
+  const fee = mode === 'delivery' ? (zone?.fee ?? 0) : 0
+  const cheapest = zoneList.length > 0 ? Math.min(...zoneList.map((z) => z.fee)) : 0
+  const missing =
+    mode === 'delivery' && zone ? Math.max(0, zone.minimumOrder - cart.subtotal()) : 0
+
+  // Les zones viennent du serveur : aucun tarif n'est ecrit dans l'interface.
+  useEffect(() => {
+    if (!open) return
+    zonesApi
+      .list()
+      .then((list) => {
+        setZoneList(list)
+        setZoneId((cur) => cur || list[0]?.id || '')
+      })
+      .catch(() => setZoneList([]))
+  }, [open])
 
   /**
    * Le livreur a besoin de coordonnées pour la distance et l'itinéraire.
@@ -247,19 +295,36 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
       setNeedsAccount(true)
       return
     }
-    if (mode === 'delivery' && address.trim().length < 6) {
-      notify('Indiquez une adresse de livraison complète.', 'error')
-      return
+    if (mode === 'delivery') {
+      if (address.trim().length < 6) {
+        notify('Indiquez une adresse de livraison complète.', 'error')
+        return
+      }
+      if (!zone) {
+        notify('Choisissez votre zone de livraison.', 'error')
+        return
+      }
+      if (missing > 0) {
+        notify(
+          `Minimum ${moneyDT(zone.minimumOrder)} pour livrer à ${zone.name}.`,
+          'error',
+        )
+        return
+      }
     }
     setBusy(true)
     try {
-      const order = await orders.createOnline(
-        cart.lines,
-        mode,
-        mode === 'delivery'
-          ? { address: address.trim(), lat: coords?.lat, lng: coords?.lng }
-          : undefined,
-      )
+      const order = await orders.createOnline(cart.lines, mode, {
+        customerPhone: phone.trim() || undefined,
+        ...(mode === 'delivery'
+          ? {
+              address: address.trim(),
+              lat: coords?.lat,
+              lng: coords?.lng,
+              zoneId: zone?.id,
+            }
+          : {}),
+      })
       cart.clear()
       onClose()
       navigate(`/commande/${order.id}`)
@@ -334,13 +399,56 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
             active={mode === 'delivery'}
             icon={Bike}
             label="Livraison"
-            detail={`+ ${moneyDT(DELIVERY_FEE_HINT)}`}
+            detail={
+              zoneList.length === 0
+                ? 'Indisponible'
+                : `dès ${moneyDT(cheapest)}`
+            }
             onClick={() => setMode('delivery')}
           />
         </div>
 
         {mode === 'delivery' && (
           <div className="mt-4 space-y-2.5">
+            {zoneList.length === 0 ? (
+              <p className="rounded-[9px] bg-ink-100 px-3.5 py-3 text-[13px] leading-snug text-ink-600">
+                La livraison n'est pas proposée pour le moment. Choisissez
+                « Je récupère ».
+              </p>
+            ) : (
+              <Field label="Votre quartier" hint="Il détermine les frais et le délai">
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {zoneList.map((z) => (
+                    <button
+                      key={z.id}
+                      type="button"
+                      onClick={() => setZoneId(z.id)}
+                      className={`rounded-[9px] border px-3 py-2.5 text-left transition-colors ${
+                        z.id === zoneId
+                          ? 'border-petrol-500 bg-petrol-50'
+                          : 'border-ink-200 hover:border-ink-300'
+                      }`}
+                    >
+                      <span className="block text-[13.5px] font-semibold text-ink-900">
+                        {z.name}
+                      </span>
+                      <span className="num block text-[12px] text-ink-500">
+                        {moneyDT(z.fee)} · ~{z.estimatedMinutes} min
+                        {z.minimumOrder > 0 && ` · min ${moneyDT(z.minimumOrder)}`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            )}
+
+            {missing > 0 && zone && (
+              <p className="rounded-[9px] border border-saffron-500/35 bg-saffron-50 px-3.5 py-2.5 text-[12.5px] leading-snug text-saffron-700">
+                Il manque <span className="num font-bold">{moneyDT(missing)}</span> pour
+                atteindre le minimum de {zone.name}.
+              </p>
+            )}
+
             <Field label="Adresse de livraison">
               <Input
                 value={address}
@@ -369,6 +477,22 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
             </p>
           </div>
         )}
+
+        <div className="mt-4">
+          <Field
+            label="Votre téléphone"
+            hint="Pour vous prévenir quand c'est prêt"
+          >
+            <Input
+              type="tel"
+              inputMode="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="20 123 456"
+              className="num"
+            />
+          </Field>
+        </div>
 
         <dl className="mt-5 space-y-1.5 border-t border-ink-100 pt-4 text-[14px]">
           <div className="flex justify-between">

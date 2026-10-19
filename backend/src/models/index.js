@@ -13,6 +13,7 @@ const StockMovement = require('./StockMovement');
 const DriverLocation = require('./DriverLocation');
 const { Setting } = require('./Setting');
 const AuditLog = require('./AuditLog');
+const DeliveryZone = require('./DeliveryZone');
 
 // --- Associations ---
 
@@ -61,4 +62,5 @@ module.exports = {
   DriverLocation,
   Setting,
   AuditLog,
+  DeliveryZone,
 };
