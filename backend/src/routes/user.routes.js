@@ -59,7 +59,7 @@ router.post('/', requireAuth, requireRole('manager', 'admin', 'super_admin'), as
     role,
     phone: phone || null,
     email: email || null,
-    passwordHash: password ? await bcrypt.hash(password, 10) : null,
+    passwordHash: password ? await bcrypt.hash(password, 12) : null,
     loginCode: loginCode || null,
     qrToken: uuidv4(), // sert de badge scannable
   });

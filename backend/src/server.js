@@ -11,6 +11,7 @@ require('express-async-errors');
 
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const http = require('http');
 const path = require('path');
 const fs = require('fs');
@@ -87,6 +88,49 @@ app.use(
   })
 );
 
+/**
+ * En-tetes de securite.
+ *
+ * L'application tourne dans un navigateur, sur une adresse publique. Sans
+ * ces en-tetes, elle peut etre affichee dans un cadre invisible sur un
+ * autre site — le temps qu'un caissier clique a cote et valide ce qu'il
+ * n'a pas vu — et un navigateur qui a connu l'adresse en HTTPS peut etre
+ * ramene en HTTP sur un reseau Wi-Fi hostile.
+ *
+ * La politique de contenu est volontairement etroite : tout vient de ce
+ * serveur, sauf les tuiles de la carte de livraison, qui viennent
+ * d'OpenStreetMap. Les styles en ligne restent autorises, Tailwind et les
+ * calculs de position en posent dans le document.
+ */
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        // Google Fonts, le temps que les polices soient hebergees ici :
+        // une caisse ne devrait pas dependre d'un service tiers pour
+        // s'afficher, ni faire connaitre chaque client a un tiers.
+        styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://*.tile.openstreetmap.org'],
+        connectSrc: ["'self'", 'ws:', 'wss:'],
+        fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+        upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+      },
+    },
+    // Un an, avec les sous-domaines : une fois l'adresse connue en HTTPS,
+    // le navigateur refuse de revenir en clair.
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: false },
+    // Gene le chargement de ressources tierces sans contrepartie ici.
+    crossOriginEmbedderPolicy: false,
+    referrerPolicy: { policy: 'same-origin' },
+  })
+);
+
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
@@ -157,8 +201,27 @@ app.use((err, req, res, next) => {
     });
   }
 
+  /**
+   * Refus metier : le message a ete ecrit pour etre lu par la personne
+   * devant l'ecran (« ce plat ne figure plus a la carte »). Il sort tel quel.
+   */
+  if (err && err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ error: err.message });
+  }
+
+  /**
+   * Tout le reste est un defaut du serveur. Le detail part dans les
+   * journaux, jamais dans la reponse : un message d'erreur brut contient
+   * des requetes SQL, des noms de colonnes et des chemins de fichiers,
+   * c'est-a-dire le plan du systeme offert a qui sait provoquer la panne.
+   */
   console.error(err);
-  res.status(500).json({ error: err.message || 'Erreur serveur.' });
+  res.status(500).json({
+    error:
+      process.env.NODE_ENV === 'production'
+        ? 'Erreur serveur. Reessayez, et prevenez le gerant si cela persiste.'
+        : err.message || 'Erreur serveur.',
+  });
 });
 
 const server = http.createServer(app);

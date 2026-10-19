@@ -111,9 +111,66 @@ const sweep = setInterval(() => {
 }, 5 * 60 * 1000);
 sweep.unref?.(); // ne doit pas empecher le processus de se terminer
 
+/* ─────────── Debit des points d'entree publics ─────────── */
+
+/**
+ * Limite simple du nombre d'appels, pour les routes ouvertes a tous.
+ *
+ * La borne et l'inscription client n'exigent aucun compte : c'est
+ * necessaire, mais cela signifie qu'une seule boucle peut remplir la file
+ * de la caisse de fausses commandes jusqu'a rendre l'ecran inutilisable,
+ * ou creer des milliers de comptes. Le compteur ci-dessus ne sert a rien
+ * ici, puisque ces appels reussissent.
+ *
+ * Les seuils sont larges : une borne en plein coup de feu ne doit jamais
+ * les atteindre.
+ */
+const counters = new Map();
+
+function throttle(name, { max, windowMs }) {
+  return (req, res, next) => {
+    const key = `${name}:${req.ip || 'inconnu'}`;
+    const now = Date.now();
+    const entry = counters.get(key);
+
+    if (!entry || now - entry.startedAt > windowMs) {
+      counters.set(key, { count: 1, startedAt: now });
+      return next();
+    }
+
+    entry.count += 1;
+    if (entry.count > max) {
+      const seconds = Math.ceil((entry.startedAt + windowMs - now) / 1000);
+      res.set('Retry-After', String(seconds));
+      return res.status(429).json({
+        error: 'Trop de demandes. Patientez un instant.',
+        retryAfter: seconds,
+      });
+    }
+    next();
+  };
+}
+
 /** Pour les tests : repart d'une table vide. */
 function reset() {
   buckets.clear();
+  counters.clear();
 }
 
-module.exports = { guard, recordFailure, recordSuccess, reset, WINDOW_MS, STEPS };
+const sweepCounters = setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of counters) {
+    if (now - entry.startedAt > WINDOW_MS) counters.delete(key);
+  }
+}, 5 * 60 * 1000);
+sweepCounters.unref?.();
+
+module.exports = {
+  guard,
+  recordFailure,
+  recordSuccess,
+  throttle,
+  reset,
+  WINDOW_MS,
+  STEPS,
+};

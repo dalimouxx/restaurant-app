@@ -2,7 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
-const { guard, recordFailure, recordSuccess } = require('../middleware/rateLimit');
+const { guard, recordFailure, recordSuccess, throttle } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
@@ -87,7 +87,11 @@ router.post('/login-qr', guard(LOGIN), async (req, res) => {
 });
 
 // --- Inscription client (app mobile) ---
-router.post('/register-customer', async (req, res) => {
+// Dix comptes par heure et par adresse : au-dela, c'est un script.
+router.post(
+  '/register-customer',
+  throttle('inscription', { max: 10, windowMs: 60 * 60 * 1000 }),
+  async (req, res) => {
   const { fullName, phone, email, password } = req.body;
   if (!fullName || !phone) {
     return res.status(400).json({ error: 'Nom et telephone requis.' });
@@ -95,7 +99,7 @@ router.post('/register-customer', async (req, res) => {
   const existing = await User.findOne({ where: { phone } });
   if (existing) return res.status(409).json({ error: 'Ce numero est deja utilise.' });
 
-  const passwordHash = password ? await bcrypt.hash(password, 10) : null;
+  const passwordHash = password ? await bcrypt.hash(password, 12) : null;
   const user = await User.create({
     fullName, phone, email, passwordHash, role: 'customer',
   });

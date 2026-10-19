@@ -6,6 +6,8 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { deductStockForOrderItems, restoreStockForOrderItems } = require('./stock.routes');
 const socket = require('../sockets/socketHandler');
 const audit = require('../audit');
+const { badRequest } = require('../errors');
+const { throttle } = require('../middleware/rateLimit');
 
 const router = express.Router();
 
@@ -43,8 +45,14 @@ async function getNextOrderNumber(orderDate) {
   return Number.isFinite(highest) ? highest + 1 : 1;
 }
 
-// --- Creation d'une commande depuis la borne (kiosque) ou le comptoir : statut = en attente de paiement ---
-router.post('/kiosk', async (req, res) => {
+/**
+ * Borne en libre-service : aucune connexion, par nature. L'ecran est dans
+ * la salle, mais l'adresse, elle, est sur Internet — une boucle depuis
+ * n'importe ou pouvait remplir la file de la caisse de fausses commandes.
+ * Quarante par quart d'heure et par adresse : au-dela du rythme d'une
+ * borne en plein coup de feu.
+ */
+router.post('/kiosk', throttle('borne', { max: 40, windowMs: 15 * 60 * 1000 }), async (req, res) => {
   const { items, fulfillmentType } = req.body;
   // items = [{ productId, quantity, customization }]
 
@@ -121,14 +129,14 @@ async function createOrderWithItems(opts) {
 
   for (const item of items) {
     const product = await Product.findByPk(item.productId);
-    if (!product) throw new Error('Produit introuvable: ' + item.productId);
+    if (!product) throw badRequest('Un plat de la commande n\'existe plus.');
     // Un plat retire de la carte peut encore tenir dans un onglet reste
     // ouvert ou dans un panier abandonne : on refuse sans ambiguite.
     if (product.isArchived) {
-      throw new Error(`"${product.name}" ne figure plus a la carte.`);
+      throw badRequest(`« ${product.name} » ne figure plus à la carte.`);
     }
     if (!product.isAvailable) {
-      throw new Error(`"${product.name}" est actuellement indisponible (stock).`);
+      throw badRequest(`« ${product.name} » est épuisé.`);
     }
 
     /**
@@ -145,7 +153,7 @@ async function createOrderWithItems(opts) {
       : [];
 
     if (options.length !== requested.length) {
-      throw new Error(`Choix inconnu pour "${product.name}".`);
+      throw badRequest(`Choix inconnu pour « ${product.name} ».`);
     }
 
     const extras = options.reduce((sum, o) => sum + o.extraPrice, 0);
