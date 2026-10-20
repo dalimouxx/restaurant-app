@@ -292,6 +292,10 @@ export interface Settings {
   /** Fond de carte du suivi : adresse des tuiles du fournisseur, clé comprise. */
   mapTileUrl: string
   mapAttribution: string
+  /** Déroulé du service, réglable en plein coup de feu. */
+  etapesCuisine: 'deux' | 'une' | 'aucune'
+  livraisonActive: 'oui' | 'non'
+  caisseSimplifiee: 'oui' | 'non'
   openingHours: Record<WeekDay, DayHours>
   opening: OpeningState
 }

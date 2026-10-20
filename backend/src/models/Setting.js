@@ -17,6 +17,7 @@ const Setting = sequelize.define('Setting', {
 });
 
 const { DEFAULT_HOURS, normalizeHours, openingState } = require('../openingHours');
+const { badRequest } = require('../errors');
 
 /** Valeurs de depart, utilisees tant que rien n'a ete saisi. */
 const DEFAULTS = {
@@ -39,6 +40,41 @@ const DEFAULTS = {
   // constante dans le code : le gerant la change sans redeploiement.
   mapTileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   mapAttribution: '© OpenStreetMap',
+
+  // --- Deroule du service ---
+  //
+  // Tous les etablissements ne travaillent pas de la meme facon, et le
+  // meme etablissement ne travaille pas pareil a midi et a 22 h. Un
+  // fastfood qui sort un sandwich en deux minutes n'a que faire de
+  // « en preparation » puis « pret » : c'est deux gestes de plus a
+  // chaque commande, pour une information que personne ne lit. Et
+  // certains soirs il n'y a ni caissier ni livreur.
+  //
+  // Imposer un deroule unique obligerait chaque client a s'y plier ou a
+  // laisser trainer des commandes dans un etat que plus personne ne fait
+  // avancer. Ces trois reglages se changent en plein service.
+
+  // 'deux'   : en preparation, puis pret — pour une cuisine qui mijote
+  // 'une'    : un seul bouton « Termine » — le rythme d'un fastfood
+  // 'aucune' : pas d'ecran cuisine, la commande est prete des l'encaissement
+  etapesCuisine: 'deux',
+
+  // 'non' : la livraison disparait de la borne et du site, et les
+  // commandes deja en cours restent livrables — on ne laisse pas un
+  // client en plan parce qu'un reglage a change pendant sa commande.
+  livraisonActive: 'oui',
+
+  // 'oui' : un seul geste encaisse, sans ouvrir de session ni choisir un
+  // moyen de paiement. Pour les services sans caissier, ou le gerant
+  // confirme lui-meme entre deux clients.
+  caisseSimplifiee: 'non',
+};
+
+/** Reglages a choix ferme : une valeur inventee est refusee, pas enregistree. */
+const CHOIX = {
+  etapesCuisine: ['deux', 'une', 'aucune'],
+  livraisonActive: ['oui', 'non'],
+  caisseSimplifiee: ['oui', 'non'],
 };
 
 /** Les horaires sont un objet, pas une ligne de texte : ils ont leur place a part. */
@@ -74,9 +110,18 @@ async function saveSettings(patch) {
       continue;
     }
     if (!allowed.includes(key)) continue;
+
+    // Un choix ferme mal orthographie laisserait le service dans un etat
+    // qu'aucun ecran ne sait afficher : mieux vaut refuser tout de suite.
+    if (CHOIX[key] && !CHOIX[key].includes(String(value))) {
+      throw badRequest(
+        `Valeur refusee pour ${key} : attendu ${CHOIX[key].join(', ')}.`
+      );
+    }
+
     await Setting.upsert({ key, value: String(value ?? '').slice(0, MAX_TEXT) });
   }
   return getSettings();
 }
 
-module.exports = { Setting, getSettings, saveSettings, DEFAULTS };
+module.exports = { Setting, getSettings, saveSettings, DEFAULTS, CHOIX };

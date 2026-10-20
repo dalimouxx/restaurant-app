@@ -14,6 +14,8 @@ import {
 import { OpeningHoursCard } from './OpeningHoursCard'
 import { DeliveryZonesCard } from './DeliveryZonesCard'
 import { MapTilesCard } from './MapTilesCard'
+import { ServiceCard } from './ServiceCard'
+import { rafraichirReglages } from '../../lib/reglages'
 
 /**
  * Informations de l'établissement. Elles figurent en tête de chaque reçu,
@@ -36,6 +38,7 @@ export default function SettingsPage() {
     setBusy(true)
     try {
       setForm(await settingsApi.save(form))
+      rafraichirReglages()
       notify('Réglages enregistrés.', 'success')
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Enregistrement refusé.', 'error')
@@ -154,6 +157,13 @@ export default function SettingsPage() {
       />
 
       <DeliveryZonesCard />
+
+      <ServiceCard
+        form={form}
+        busy={busy}
+        onChange={(patch) => setForm((f) => (f ? { ...f, ...patch } : f))}
+        onSave={save}
+      />
 
       <MapTilesCard
         tileUrl={form.mapTileUrl}

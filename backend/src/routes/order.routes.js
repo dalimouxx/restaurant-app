@@ -166,6 +166,26 @@ async function createOrderWithItems(opts) {
     deliveryFee = 0, minimumOrder = 0, zoneName,
   } = opts;
 
+  /**
+   * Livraison suspendue.
+   *
+   * Le controle est ici, dans la fabrique commune, et non dans chaque
+   * route : la borne ne passe pas par le meme chemin que le site, et un
+   * garde pose cote site l'aurait laissee prendre des livraisons que
+   * personne n'etait la pour porter. Toute commande, d'ou qu'elle
+   * vienne, passe par cette fonction.
+   *
+   * Les courses deja acceptees ne sont pas concernees : elles vont
+   * jusqu'au bout. On ne laisse pas un client en plan parce qu'un
+   * reglage a change pendant qu'il attendait.
+   */
+  if (fulfillmentType === 'delivery') {
+    const { livraisonActive } = await getSettings();
+    if (livraisonActive !== 'oui') {
+      throw new HttpError(409, 'La livraison est suspendue pour le moment.');
+    }
+  }
+
   let subtotal = 0;
   const enrichedItems = [];
 
@@ -340,7 +360,16 @@ router.post('/:id/pay', requireAuth, requireRole('cashier', 'manager', 'admin', 
     }
   }
 
-  order.status = 'in_kitchen';
+  /**
+   * Ou va la commande une fois payee.
+   *
+   * Sans ecran cuisine, « en cuisine » designerait un poste qui n'existe
+   * pas : la commande resterait la jusqu'a ce que quelqu'un la pousse a
+   * la main, et personne ne le ferait. Elle est donc prete tout de suite,
+   * et l'ecran de salle appelle le numero.
+   */
+  const { etapesCuisine } = await getSettings();
+  order.status = etapesCuisine === 'aucune' ? 'ready' : 'in_kitchen';
   order.paymentMethod = methode;
   order.paidAt = new Date();
   order.cashierId = req.user.id;
@@ -697,6 +726,23 @@ router.post('/:id/kitchen-status', requireAuth, requireRole('cook', 'manager', '
   const { status } = req.body; // 'in_kitchen' | 'preparing' | 'ready'
   if (!['in_kitchen', 'preparing', 'ready'].includes(status)) {
     throw badRequest('Statut de cuisine invalide.');
+  }
+
+  /**
+   * Le deroule retenu par l'etablissement fait foi.
+   *
+   * En un seul geste, « en preparation » n'existe pas : l'accepter
+   * quand meme creerait des commandes dans un etat que l'ecran de
+   * cuisine n'affiche plus, et qu'aucun bouton ne ferait avancer.
+   */
+  const { etapesCuisine } = await getSettings();
+  if (etapesCuisine === 'aucune') {
+    throw badRequest("L'ecran de cuisine est desactive dans les reglages.");
+  }
+  if (etapesCuisine === 'une' && status === 'preparing') {
+    throw badRequest(
+      "Le service se fait en un seul geste : la commande passe directement a « prete »."
+    );
   }
 
   const order = await Order.findByPk(req.params.id);

@@ -18,6 +18,7 @@ import { EmptyState, useNow, useToast } from '../../components/ui'
 import { ConnectionDot } from '../../components/ConnectionDot'
 import { usePrint } from '../../components/PrintHost'
 import { Wordmark } from '../../components/Shell'
+import { useReglages } from '../../lib/reglages'
 
 /** Seuils d'alerte, en minutes depuis l'arrivée du ticket. */
 const WARN_AT = 8
@@ -30,6 +31,7 @@ export default function KitchenScreen() {
   const { notify } = useToast()
   const { print } = usePrint()
   const now = useNow(5000)
+  const { etapes } = useReglages()
 
   /** Impression du bon à l'arrivée, mémorisée sur ce poste. */
   const [autoPrint, setAutoPrint] = useState(() => {
@@ -110,7 +112,11 @@ export default function KitchenScreen() {
   }
 
   async function advance(order: Order) {
-    const next = order.status === 'in_kitchen' ? 'preparing' : 'ready'
+    // En un seul geste, « en préparation » n'existe pas : le ticket va
+    // directement à « prête ». Un fastfood sort un sandwich en deux
+    // minutes — deux appuis par commande, c'est un appui de trop.
+    const next =
+      order.status === 'in_kitchen' && etapes === 'deux' ? 'preparing' : 'ready'
     setBusyId(order.id)
     // Mise à jour optimiste : en cuisine, l'écran doit répondre au doigt.
     setQueue((q) => q.map((o) => (o.id === order.id ? { ...o, status: next } : o)))
@@ -251,6 +257,7 @@ export default function KitchenScreen() {
                 now={now}
                 busy={busyId === order.id}
                 onAdvance={() => advance(order)}
+                unSeulGeste={etapes === 'une'}
                 onPrint={() => print({ order, kind: 'kitchen' })}
                 onRecall={() => rappeler(order)}
               />
@@ -270,10 +277,12 @@ function Ticket({
   onAdvance,
   onPrint,
   onRecall,
+  unSeulGeste,
 }: {
   order: Order
   now: number
   busy: boolean
+  unSeulGeste: boolean
   onAdvance: () => void
   onPrint: () => void
   onRecall: () => void
@@ -431,12 +440,12 @@ function Ticket({
             onClick={onAdvance}
             disabled={busy}
             className={`h-12 w-full rounded-[9px] text-[15px] font-bold transition-colors disabled:opacity-50 ${
-              order.status === 'in_kitchen'
+              order.status === 'in_kitchen' && !unSeulGeste
                 ? 'bg-ink-700 text-white hover:bg-ink-600'
                 : 'bg-petrol-600 text-white hover:bg-petrol-500'
             }`}
           >
-            {order.status === 'in_kitchen' ? 'Commencer' : 'Marquer prête'}
+            {order.status === 'in_kitchen' && !unSeulGeste ? 'Commencer' : 'Marquer prête'}
           </button>
         )}
       </div>
