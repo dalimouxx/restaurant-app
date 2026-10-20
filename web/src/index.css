@@ -1,5 +1,16 @@
 @import 'tailwindcss';
 
+/*
+ * Schema de couleurs fixe.
+ *
+ * Sans cette declaration, un telephone regle en mode sombre fait dessiner
+ * au navigateur ses propres champs, listes et selecteurs d'heure en clair
+ * sur fond sombre — au milieu d'une interface concue claire. Les surfaces
+ * reellement sombres de l'application le declarent pour elles-memes.
+ */
+:root { color-scheme: light; }
+.dark-surface { color-scheme: dark; }
+
 /* ───────────────────────────────────────────────────────────
    Système de design « Service »
    Chassis graphite froid, vert pétrole comme unique couleur

@@ -1,0 +1,568 @@
+<title>Chez Mohamed — visite guidée</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  /* Bande verticale continue : un poste par section, chacune ouverte par
+     son éclat de couleur, les captures en pleine largeur au centre. */
+  :root {
+    --bg:        #f4f6f5;
+    --surface:   #ffffff;
+    --ink:       #101418;
+    --ink-soft:  #5b6560;
+    --ink-faint: #8d9793;
+    --line:      #dde3e0;
+    --petrol:    #0b6b5b;
+    --petrol-lo: #e6f0ed;
+    --saffron:   #b4780a;
+    --coral:     #c0453a;
+
+    --display: 'Figtree', ui-sans-serif, system-ui, -apple-system, sans-serif;
+    --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:        #0c100f;
+      --surface:   #151b19;
+      --ink:       #eef2f0;
+      --ink-soft:  #9aa5a0;
+      --ink-faint: #6b7570;
+      --line:      #242d2a;
+      --petrol:    #3fae96;
+      --petrol-lo: #112a25;
+      --saffron:   #d9a13c;
+      --coral:     #e0756a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:        #0c100f;
+    --surface:   #151b19;
+    --ink:       #eef2f0;
+    --ink-soft:  #9aa5a0;
+    --ink-faint: #6b7570;
+    --line:      #242d2a;
+    --petrol:    #3fae96;
+    --petrol-lo: #112a25;
+    --saffron:   #d9a13c;
+    --coral:     #e0756a;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--display);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin-inline: auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  /* ── Ouverture ── */
+  .hero { padding-block: 56px 40px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--petrol);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(32px, 6vw, 52px);
+    line-height: 1.04;
+    letter-spacing: -0.035em;
+    font-weight: 800;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .lede {
+    margin: 16px 0 0;
+    max-width: 62ch;
+    font-size: clamp(16px, 2.1vw, 18px);
+    color: var(--ink-soft);
+  }
+
+  .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px 44px;
+    margin-top: 32px;
+  }
+  .stat b {
+    display: block;
+    font-family: var(--mono);
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .stat span {
+    font-size: 13px;
+    color: var(--ink-faint);
+  }
+
+  /* ── Sommaire ── */
+  nav.index { padding-block: 24px; border-bottom: 1px solid var(--line); }
+  nav.index ol {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    counter-reset: poste;
+  }
+  nav.index a {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 7px 14px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--ink);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+    transition: border-color .15s, color .15s;
+  }
+  nav.index a:hover { border-color: var(--petrol); color: var(--petrol); }
+  nav.index a::before {
+    counter-increment: poste;
+    content: counter(poste);
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+  }
+  nav.index a:focus-visible { outline: 2px solid var(--petrol); outline-offset: 2px; }
+
+  /* ── Postes ── */
+  section.poste { padding-block: 52px; border-bottom: 1px solid var(--line); scroll-margin-top: 16px; }
+  .poste-head { max-width: 64ch; }
+  .poste-kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 8px;
+  }
+  .poste h2 {
+    font-size: clamp(24px, 3.6vw, 32px);
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    font-weight: 700;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .poste h2 .url {
+    font-family: var(--mono);
+    font-size: 0.5em;
+    font-weight: 500;
+    color: var(--ink-faint);
+    letter-spacing: 0;
+    margin-left: 10px;
+    vertical-align: middle;
+  }
+  .poste-head p { margin: 12px 0 0; color: var(--ink-soft); }
+
+  .shots { display: grid; gap: 32px; margin-top: 28px; }
+  @media (min-width: 760px) { .shots.pair { grid-template-columns: 1fr 1fr; } }
+
+  figure { margin: 0; min-width: 0; }
+  figure img {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+  }
+  figcaption {
+    margin-top: 12px;
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  /* Capture de téléphone : étroite, centrée, pas étirée. */
+  figure.phone img { max-width: 340px; margin-inline: auto; }
+  figure.phone figcaption { max-width: 48ch; margin-inline: auto; text-align: center; }
+
+  .note {
+    margin-top: 28px;
+    padding: 16px 18px;
+    border-left: 3px solid var(--saffron);
+    background: var(--surface);
+    border-radius: 0 10px 10px 0;
+    font-size: 14.5px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 68ch;
+  }
+  .note b { color: var(--ink); font-weight: 600; }
+
+  /* ── L'invisible ── */
+  .invisible { padding-block: 52px; }
+  .invisible h2 {
+    font-size: clamp(22px, 3.2vw, 28px);
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+    font-weight: 700;
+  }
+  .invisible > p { margin: 0 0 24px; color: var(--ink-soft); max-width: 64ch; }
+
+  .grid {
+    display: grid;
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  @media (min-width: 620px) { .grid { grid-template-columns: 1fr 1fr; } }
+  .cell { background: var(--surface); padding: 18px 20px; }
+  .cell h3 {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .cell p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--ink-soft); }
+
+  footer {
+    padding-block: 36px 56px;
+    border-top: 1px solid var(--line);
+    color: var(--ink-faint);
+    font-size: 14px;
+  }
+  footer p { margin: 0; max-width: 64ch; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">Visite guidée · 19 octobre 2026</p>
+    <h1>Tout ce que l'application sait faire aujourd'hui</h1>
+    <p class="lede">
+      Captures prises dans un service en cours, sur un restaurant fictif monté
+      pour l'occasion : treize plats, trois zones de livraison, cinq commandes
+      en cuisine et trois qui attendent l'encaissement. Rien n'est maquetté —
+      ce sont les écrans réels.
+    </p>
+
+    <div class="stats">
+      <div class="stat"><b>18</b><span>captures</span></div>
+      <div class="stat"><b>11</b><span>écrans</span></div>
+      <div class="stat"><b>321</b><span>contrôles automatisés</span></div>
+      <div class="stat"><b>0</b><span>échec</span></div>
+    </div>
+  </header>
+
+  <nav class="index" aria-label="Sommaire">
+    <ol>
+      <li><a href="#borne">La borne</a></li>
+      <li><a href="#salle">L'écran de salle</a></li>
+      <li><a href="#caisse">La caisse</a></li>
+      <li><a href="#cuisine">La cuisine</a></li>
+      <li><a href="#gestion">La gestion</a></li>
+      <li><a href="#client">Le client</a></li>
+      <li><a href="#invisible">Ce qui ne se voit pas</a></li>
+    </ol>
+  </nav>
+
+  <section class="poste" id="borne">
+    <div class="poste-head">
+      <p class="poste-kicker" style="color: var(--petrol)">Le client, sur place</p>
+      <h2>La borne<span class="url">/borne</span></h2>
+      <p>
+        Plein écran, aucune connexion. Le client compose, puis paie en caisse
+        avec son numéro.
+      </p>
+    </div>
+
+    <div class="shots pair">
+      <figure>
+        <img src="img/02-borne.png" alt="Borne de commande, catégorie Boissons, panier vide à droite">
+        <figcaption>
+          <b>Les catégories dans l'ordre que tu choisis.</b> Ce qui rapporte le
+          plus se met en premier, depuis l'écran Carte.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/03-borne-choix.png" alt="Choix prédéfinis d'un plat : retraits en rouge, ajouts payants en jaune">
+        <figcaption>
+          <b>Les choix prédéfinis.</b> « Sans harissa » est gratuit, « extra
+          fromage » ajoute 1,200 DT. Le client touche, il n'écrit jamais.
+        </figcaption>
+      </figure>
+    </div>
+
+    <p class="note">
+      <b>Les photos manquent.</b> C'est ce qui rend cet écran vide. Le champ
+      existe, l'envoi est prêt depuis l'écran Carte — il n'y a simplement aucune
+      image dans la base. Une photo par plat transforme cette page.
+    </p>
+  </section>
+
+  <section class="poste" id="salle">
+    <div class="poste-head">
+      <p class="poste-kicker" style="color: var(--petrol)">La salle</p>
+      <h2>L'écran de salle<span class="url">/ecran</span></h2>
+      <p>
+        Un moniteur au mur, cette page ouverte, et c'est fini. Les numéros prêts
+        passent en vert ; un signal sonore annonce chaque nouveau.
+      </p>
+    </div>
+
+    <div class="shots">
+      <figure>
+        <img src="img/04-ecran-salle.png" alt="Écran mural : numéros en préparation à gauche, numéros prêts en vert à droite">
+        <figcaption>
+          <b>Aucune connexion, et pour cause :</b> un écran accroché au mur ne
+          doit pas garder une session de caissier ouverte. Le serveur ne lui
+          envoie qu'un numéro et un état — ni montant, ni plat, ni nom de client.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="poste" id="caisse">
+    <div class="poste-head">
+      <p class="poste-kicker" style="color: var(--petrol)">Le poste de caisse</p>
+      <h2>La caisse<span class="url">/caisse</span></h2>
+      <p>
+        Connexion par code à quatre chiffres ou par badge. Fond de caisse à
+        l'ouverture, écart calculé à la clôture.
+      </p>
+    </div>
+
+    <div class="shots pair">
+      <figure>
+        <img src="img/05-caisse.png" alt="Poste de caisse : file d'attente à gauche, pavé de paiement à droite">
+        <figcaption>
+          <b>File à gauche, encaissement à droite.</b> Les flèches du clavier
+          parcourent la file sans quitter le pavé numérique. Le rendu de monnaie
+          se calcule pendant la frappe.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/06-caisse-commande.png" alt="Prise de commande au comptoir : grille de plats et ticket en cours">
+        <figcaption>
+          <b>Le caissier prend aussi les commandes.</b> Même grille que la borne,
+          mêmes choix prédéfinis : il tape sur des boutons, jamais au clavier.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/07-caisse-aujourdhui.png" alt="Onglet Aujourd'hui : commandes du service, une annulée barrée">
+        <figcaption>
+          <b>L'onglet « Aujourd'hui ».</b> Réimprimer un reçu, ou rattraper une
+          erreur commise trente secondes plus tôt. La commande annulée reste
+          visible, barrée.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/08-caisse-annulation.png" alt="Modale d'annulation : cinq motifs prédéfinis, avertissement de remboursement">
+        <figcaption>
+          <b>Le motif se touche.</b> Cinq motifs fermés, pas de texte libre :
+          c'est ce qui permet de comparer un mois sur l'autre. Si la commande
+          était encaissée, le montant à rendre est rappelé.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="poste" id="cuisine">
+    <div class="poste-head">
+      <p class="poste-kicker" style="color: var(--petrol)">Derrière le passe</p>
+      <h2>La cuisine<span class="url">/cuisine</span></h2>
+      <p>
+        Fond sombre, gros caractères, un bouton par ticket. Conçu pour être lu de
+        loin, les mains occupées.
+      </p>
+    </div>
+
+    <div class="shots">
+      <figure>
+        <img src="img/09-cuisine.png" alt="Écran cuisine : quatre tickets, modifications en rouge et jaune">
+        <figcaption>
+          <b>Les modifications sautent aux yeux.</b> <span style="color: var(--coral)">SANS HARISSA</span>
+          en rouge, <span style="color: var(--saffron)">EXTRA FROMAGE</span> en
+          jaune : c'est là que les erreurs coûtent cher. Le contour du ticket
+          passe à l'orange après huit minutes, au rouge après quinze.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="poste" id="gestion">
+    <div class="poste-head">
+      <p class="poste-kicker" style="color: var(--petrol)">Le gérant</p>
+      <h2>La gestion<span class="url">/gestion</span></h2>
+      <p>
+        Six écrans. C'est la partie qui a le plus changé ces deux derniers jours,
+        et celle que tu n'as probablement pas ouverte.
+      </p>
+    </div>
+
+    <div class="shots pair">
+      <figure>
+        <img src="img/10-gestion-finances.png" alt="Tableau de bord financier : chiffre d'affaires, coût matière, bénéfice net">
+        <figcaption>
+          <b>Finances.</b> Ce qui entre, ce qui sort, ce qui reste. Le coût
+          matière vient des recettes, pas d'une estimation.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/11-gestion-carte.png" alt="Écran Carte : catégories et plats avec prix, choix et recettes">
+        <figcaption>
+          <b>Carte.</b> Tu n'as plus besoin de moi pour changer un prix. Avant
+          avant-hier, il fallait que je lance un script.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/17-carte-editeur.png" alt="Éditeur d'un plat : photo, prix, choix prédéfinis en deux colonnes, recette">
+        <figcaption>
+          <b>L'éditeur de plat.</b> Photo, prix, les retraits et ajouts en deux
+          colonnes, et la recette avec son coût matière calculé en direct. Rien
+          ne part en base avant « Enregistrer ».
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/12-gestion-stock.png" alt="Écran Stock : ingrédients avec jauges, alerte sur le fromage">
+        <figcaption>
+          <b>Stock.</b> Déduit à chaque vente, selon la recette. Le fromage
+          passe sous son seuil et remonte en alerte.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/15-gestion-journal.png" alt="Journal : annulations, changement de prix, écart de caisse">
+        <figcaption>
+          <b>Journal.</b> Qui a annulé, qui a changé un prix, quel écart de
+          caisse. En ajout seul : aucune action de l'application n'efface une
+          ligne, y compris pour toi.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/16-gestion-reglages.png" alt="Réglages : établissement, aperçu du reçu, horaires, zones de livraison">
+        <figcaption>
+          <b>Réglages.</b> L'établissement avec l'aperçu du reçu, les horaires
+          jour par jour, et tes zones de livraison avec leur tarif.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/13-gestion-equipe.png" alt="Écran Équipe : comptes du personnel et badge QR">
+        <figcaption>
+          <b>Équipe.</b> Comptes, codes personnels et badges QR imprimables.
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="img/14-gestion-caisses.png" alt="Écran Caisses : historique des ouvertures et clôtures avec écarts">
+        <figcaption>
+          <b>Caisses.</b> Chaque ouverture, chaque clôture, chaque écart. Celui
+          de 38,500 DT ci-dessus est volontaire, pour la démonstration.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="poste" id="client">
+    <div class="poste-head">
+      <p class="poste-kicker" style="color: var(--petrol)">Le client, à distance</p>
+      <h2>La commande en ligne<span class="url">/commander</span></h2>
+      <p>
+        Le même menu, sur téléphone, avec le choix du quartier et le suivi de la
+        commande jusqu'à la porte.
+      </p>
+    </div>
+
+    <div class="shots">
+      <figure class="phone">
+        <img src="img/18-client-carte.png" alt="Commande en ligne sur téléphone : carte du restaurant">
+        <figcaption>
+          Au moment de valider : choix du quartier avec son tarif et son délai,
+          téléphone pour être prévenu, et le minimum de commande si la zone en a
+          un. Hors des heures d'ouverture, un bandeau annonce la réouverture.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="invisible" id="invisible">
+    <h2>Ce qui ne se voit pas</h2>
+    <p>
+      La moitié du travail de ces deux jours n'apparaît sur aucune capture. C'est
+      pourtant ce qui sépare une démonstration d'un logiciel qu'on vend.
+    </p>
+
+    <div class="grid">
+      <div class="cell">
+        <h3>L'écoute du temps réel, fermée</h3>
+        <p>
+          N'importe qui pouvait ouvrir une connexion sur l'adresse publique et
+          recevoir toutes tes commandes en direct, sans compte. Reproduit, puis
+          corrigé.
+        </p>
+      </div>
+      <div class="cell">
+        <h3>Huit vulnérabilités corrigées</h3>
+        <p>
+          Dont une critique — une usurpation d'adresse qui contournait justement
+          le blocage des tentatives de connexion.
+        </p>
+      </div>
+      <div class="cell">
+        <h3>Le stock revient après annulation</h3>
+        <p>
+          Et le montant sort du total attendu en caisse, sinon chaque annulation
+          créait un manquant au caissier.
+        </p>
+      </div>
+      <div class="cell">
+        <h3>Les numéros repartent à 1 chaque matin</h3>
+        <p>
+          Avant, le compteur tournait sur le total modulo 999 : deux commandes du
+          jour pouvaient porter le même numéro.
+        </p>
+      </div>
+      <div class="cell">
+        <h3>Les migrations de base</h3>
+        <p>
+          Les colonnes ajoutées ne seraient jamais apparues en production. Elles
+          s'appliquent maintenant au démarrage, vérifiées sur une base remplie.
+        </p>
+      </div>
+      <div class="cell">
+        <h3>321 contrôles, une commande</h3>
+        <p>
+          <span style="font-family: var(--mono); font-size: 13px">npm test</span>
+          lance dix séries contre un vrai serveur et une vraie base, en
+          redémarrant entre chacune.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Captures prises automatiquement sur l'application en fonctionnement, avec
+      un restaurant de démonstration monté pour l'occasion. Aucune image n'a été
+      retouchée.
+    </p>
+  </footer>
+</div>

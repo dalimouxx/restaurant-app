@@ -1,4 +1,6 @@
 // Vérifie que les réponses réelles du backend correspondent aux types
+
+const { pizzaDeTest, toujoursOuvert } = require('./fixture');
 // attendus par l'application web (src/lib/types.ts). Une divergence ici
 // produirait un écran blanc ou des « undefined » en production.
 
@@ -97,7 +99,7 @@ async function run() {
     'Le prix est numérique et non une chaîne (sinon les totaux se concatènent)',
   )
 
-  const pizza = prods.data.find((p) => p.name.includes('Margherita'))
+  const pizza = await pizzaDeTest(adminToken)
 
   console.log('\n— Commande depuis la borne —')
   const kiosk = await req('POST', '/orders/kiosk', {
@@ -253,7 +255,11 @@ async function run() {
     customerToken,
   )
   check(online.status === 201, 'Commande en ligne avec livraison')
-  check(online.data.deliveryFee === 7, 'Frais de livraison appliqués par le serveur')
+  // Les frais viennent de la zone choisie, plus d'une constante du code.
+  check(
+    online.data.deliveryFee === zoneLivraison.fee,
+    `Frais de livraison appliqués par le serveur (${zoneLivraison.fee} DT)`,
+  )
   check(typeof online.data.qrToken === 'string', 'order.qrToken présent (QR affiché au client)')
   check(
     typeof online.data.deliveryLat === 'number',
@@ -303,8 +309,9 @@ async function run() {
     'driverStats',
   )
   check(
-    Math.abs(stats.data.totalDriverEarnings - (7 * 0.7 + 3)) < 0.01,
-    `Commission : 70 % de 7 DT + 3 DT = 7,90 DT (reçu ${stats.data.totalDriverEarnings.toFixed(2)})`,
+    Math.abs(stats.data.totalDriverEarnings - (zoneLivraison.fee * 0.7 + 3)) < 0.01,
+    `Commission : 70 % de ${zoneLivraison.fee} DT + 3 DT de pourboire ` +
+      `(reçu ${stats.data.totalDriverEarnings.toFixed(2)})`,
   )
 
   console.log(`\n===== ${pass} vérifications réussies, ${fail} échecs =====\n`)
@@ -315,12 +322,3 @@ run().catch((e) => {
   console.error('Erreur:', e)
   process.exit(1)
 })
-
-/** Semaine entierement ouverte : les tests ne dependent pas de l'heure. */
-function toujoursOuvert() {
-  return Object.fromEntries(
-    ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [
-      d, { open: '00:00', close: '23:59', closed: false },
-    ])
-  );
-}

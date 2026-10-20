@@ -389,6 +389,8 @@ export const cashier = {
 
 export const delivery = {
   available: () => request<Order[]>('/delivery/available'),
+  /** La course assignée au livreur, s'il en a une. */
+  mine: () => request<Order | null>('/delivery/mine'),
   accept: (id: string) => request<Order>(`/delivery/${id}/accept`, { method: 'POST' }),
   confirm: (id: string, qrToken: string) =>
     request<Order>(`/delivery/${id}/confirm-delivery`, { method: 'POST', body: { qrToken } }),

@@ -17,6 +17,24 @@ router.get('/available', requireAuth, requireRole('driver'), async (req, res) =>
   res.json(orders);
 });
 
+/**
+ * La course en cours du livreur.
+ *
+ * Sans cette route, l'ecran du livreur ne connaissait sa course que par la
+ * reponse de l'acceptation, gardee en memoire. Un rafraichissement, un
+ * telephone qui se verrouille, une coupure de reseau, et la course
+ * disparaissait de son ecran alors qu'elle lui etait toujours assignee :
+ * il n'avait plus ni l'adresse, ni le montant a encaisser.
+ */
+router.get('/mine', requireAuth, requireRole('driver'), async (req, res) => {
+  const order = await Order.findOne({
+    where: { driverId: req.user.id, status: 'out_for_delivery' },
+    include: [{ model: OrderItem, as: 'items' }],
+    order: [['updatedAt', 'DESC']],
+  });
+  res.json(order); // null quand le livreur est libre
+});
+
 // --- Un livreur accepte une commande : le PREMIER arrive gagne (mise a jour atomique) ---
 router.post('/:id/accept', requireAuth, requireRole('driver'), async (req, res) => {
   const orderId = req.params.id;

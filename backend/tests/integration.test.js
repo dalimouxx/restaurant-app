@@ -1,4 +1,6 @@
 // Test d'integration complet contre le serveur reel (http://localhost:4000)
+
+const { pizzaDeTest, toujoursOuvert, FROMAGE: NOM_FROMAGE } = require('./fixture');
 // Verifie : login, creation produit/ingredient, commande kiosque, paiement caissier,
 // deduction de stock, flux cuisine, commande en ligne avec livraison, course entre
 // livreurs (le 2e doit echouer), confirmation QR, pourboire, rapport de benefice net.
@@ -48,13 +50,13 @@ async function run() {
   console.log('\n=== 2. Produits / Menu ===');
   const products = await req('GET', '/products');
   assert(products.status === 200 && products.data.length >= 2, 'Le menu contient les produits du seed');
-  const margherita = products.data.find((p) => p.name === 'Pizza Margherita');
+  const margherita = await pizzaDeTest(managerToken);
   assert(!!margherita, 'La Pizza Margherita existe dans le menu');
   assert(margherita.isAvailable === true, 'La Pizza Margherita est disponible (stock suffisant)');
 
   console.log('\n=== 3. Commande via borne (kiosque) + paiement + deduction stock ===');
   const stockBefore = await req('GET', '/stock', null, managerToken);
-  const cheeseBefore = stockBefore.data.find((i) => i.name === 'Fromage').quantityInStock;
+  const cheeseBefore = stockBefore.data.find((i) => i.name === NOM_FROMAGE).quantityInStock;
 
   const kioskOrder = await req('POST', '/orders/kiosk', {
     items: [{ productId: margherita.id, quantity: 2, customization: {} }],
@@ -68,7 +70,7 @@ async function run() {
   assert(payRes.status === 200 && payRes.data.status === 'in_kitchen', 'Paiement valide -> commande envoyee en cuisine automatiquement');
 
   const stockAfter = await req('GET', '/stock', null, managerToken);
-  const cheeseAfter = stockAfter.data.find((i) => i.name === 'Fromage').quantityInStock;
+  const cheeseAfter = stockAfter.data.find((i) => i.name === NOM_FROMAGE).quantityInStock;
   const expectedCheese = cheeseBefore - 0.15 * 2;
   assert(Math.abs(cheeseAfter - expectedCheese) < 0.0001, `Stock fromage deduit correctement (${cheeseBefore} -> ${cheeseAfter})`);
 
@@ -117,8 +119,14 @@ async function run() {
     deliveryZoneId: zoneLivraison.id,
   }, customerToken);
   assert(onlineOrder.status === 201, 'Commande en ligne avec livraison creee');
-  assert(onlineOrder.data.deliveryFee === 7, 'Frais de livraison ajoutes automatiquement (7)');
-  assert(onlineOrder.data.totalAmount === 18 + 7, 'Montant total = sous-total + frais de livraison');
+  assert(
+    onlineOrder.data.deliveryFee === zoneLivraison.fee,
+    `Frais de livraison repris de la zone (${zoneLivraison.fee} DT)`
+  );
+  assert(
+    Math.abs(onlineOrder.data.totalAmount - (onlineOrder.data.subtotal + zoneLivraison.fee)) < 0.01,
+    'Montant total = sous-total + frais de la zone'
+  );
 
   await req('POST', `/orders/${onlineOrder.data.id}/pay`, { paymentMethod: 'cash_on_delivery' }, cashierToken);
   await req('POST', `/orders/${onlineOrder.data.id}/kitchen-status`, { status: 'ready' }, managerToken);
@@ -146,12 +154,3 @@ run().catch((err) => {
   console.error('Erreur pendant les tests:', err);
   process.exit(1);
 });
-
-/** Semaine entierement ouverte : les tests ne dependent pas de l'heure. */
-function toujoursOuvert() {
-  return Object.fromEntries(
-    ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [
-      d, { open: '00:00', close: '23:59', closed: false },
-    ])
-  );
-}

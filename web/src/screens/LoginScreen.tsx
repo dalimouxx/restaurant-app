@@ -266,11 +266,6 @@ function PasswordForm({
     }
   }
 
-  const darkInput =
-    'w-full h-12 px-3.5 rounded-[9px] bg-ink-800 border border-ink-700 text-white ' +
-    'placeholder:text-ink-500 transition-colors hover:border-ink-600 ' +
-    'focus:border-petrol-500 focus:outline-none focus:ring-[3px] focus:ring-petrol-500/20'
-
   return (
     <form onSubmit={submit} className="space-y-3.5">
       <div>
@@ -280,7 +275,8 @@ function PasswordForm({
           autoComplete="username"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className={darkInput}
+          tone="dark"
+          className="h-12"
           placeholder="vous@restaurant.tn"
         />
       </div>
@@ -293,7 +289,8 @@ function PasswordForm({
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className={darkInput}
+          tone="dark"
+          className="h-12"
         />
       </div>
       {error && <p className="text-[13px] font-medium text-coral-500">{error}</p>}

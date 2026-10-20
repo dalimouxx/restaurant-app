@@ -95,25 +95,47 @@ export function Field({
   )
 }
 
-export const inputClass =
-  'w-full h-11 px-3.5 rounded-[9px] bg-white border border-ink-200 text-ink-900 ' +
-  'placeholder:text-ink-400 transition-colors ' +
-  'hover:border-ink-300 focus:border-petrol-500 focus:outline-none ' +
-  'focus:ring-[3px] focus:ring-petrol-500/18'
+/**
+ * Champs de saisie.
+ *
+ * Le fond et la couleur du texte viennent d'un `tone`, jamais d'une classe
+ * passee par l'appelant. Deux utilitaires Tailwind de meme nature — un
+ * `bg-white` ici, un `bg-ink-800` la — ont la meme specificite : c'est
+ * l'ordre de la feuille de style qui tranche, pas l'intention. L'ecran de
+ * connexion passait un fond sombre avec un texte blanc ; le fond clair
+ * l'emportait et le texte blanc restait, donnant des champs e-mail et mot
+ * de passe illisibles, blanc sur blanc.
+ */
+type FieldTone = 'light' | 'dark'
+
+const inputBase =
+  'w-full h-11 px-3.5 rounded-[9px] border transition-colors ' +
+  'focus:outline-none focus:ring-[3px] focus:ring-petrol-500/18 focus:border-petrol-500'
+
+const inputTones: Record<FieldTone, string> = {
+  light: 'bg-white border-ink-200 text-ink-900 placeholder:text-ink-400 hover:border-ink-300',
+  dark: 'bg-ink-800 border-ink-700 text-white placeholder:text-ink-500 hover:border-ink-600',
+}
+
+/** Conserve pour les quelques endroits qui composent leur propre champ. */
+export const inputClass = `${inputBase} ${inputTones.light}`
 
 export function Input(
   props: React.InputHTMLAttributes<HTMLInputElement> & {
+    tone?: FieldTone
     ref?: React.Ref<HTMLInputElement>
   },
 ) {
-  const { className = '', ...rest } = props
-  return <input {...rest} className={`${inputClass} ${className}`} />
+  const { className = '', tone = 'light', ...rest } = props
+  return <input {...rest} className={`${inputBase} ${inputTones[tone]} ${className}`} />
 }
 
-export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  const { className = '', children, ...rest } = props
+export function Select(
+  props: React.SelectHTMLAttributes<HTMLSelectElement> & { tone?: FieldTone },
+) {
+  const { className = '', tone = 'light', children, ...rest } = props
   return (
-    <select {...rest} className={`${inputClass} pr-8 ${className}`}>
+    <select {...rest} className={`${inputBase} ${inputTones[tone]} pr-8 ${className}`}>
       {children}
     </select>
   )

@@ -8,3 +8,7 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// Rend l'application installable sur téléphone et tablette.
+import { enregistrerServiceWorker } from './lib/install'
+enregistrerServiceWorker()

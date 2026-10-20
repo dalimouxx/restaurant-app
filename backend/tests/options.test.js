@@ -1,4 +1,6 @@
 // Choix predefinis : prix, vocabulaire transmis a la cuisine, stock et
+
+const { pizzaDeTest, toujoursOuvert, FROMAGE } = require('./fixture');
 // impossibilite de fabriquer un supplement depuis le navigateur.
 
 const BASE = 'http://localhost:4000/api'
@@ -46,7 +48,7 @@ async function run() {
 
   console.log('— Le menu porte les choix —')
   const products = await req('GET', '/products')
-  const pizza = products.data.find((p) => p.name === 'Pizza Margherita')
+  const pizza = await pizzaDeTest(adminToken)
   check(!!pizza, 'Pizza Margherita presente')
 
   // La base de developpement est creee par seed.js, sans options :
@@ -54,7 +56,7 @@ async function run() {
   let options = pizza.options || []
   if (options.length === 0) {
     const stock = await req('GET', '/stock', null, adminToken)
-    const fromage = stock.data.find((i) => i.name.startsWith('Fromage'))
+    const fromage = stock.data.find((i) => i.name === FROMAGE)
 
     await req(
       'POST',
@@ -158,7 +160,7 @@ async function run() {
 
   console.log('\n— Le supplement consomme du stock —')
   const avant = await req('GET', '/stock', null, adminToken)
-  const fromageAvant = avant.data.find((i) => i.name.startsWith('Fromage')).quantityInStock
+  const fromageAvant = avant.data.find((i) => i.name === FROMAGE).quantityInStock
 
   const r3 = await req('POST', '/orders/kiosk', {
     items: [{ productId: pizza.id, quantity: 1, optionIds: [extraFromage.id] }],
@@ -167,7 +169,7 @@ async function run() {
   await req('POST', `/orders/${r3.data.id}/pay`, { paymentMethod: 'cash' }, cashierToken)
 
   const apres = await req('GET', '/stock', null, adminToken)
-  const fromageApres = apres.data.find((i) => i.name.startsWith('Fromage')).quantityInStock
+  const fromageApres = apres.data.find((i) => i.name === FROMAGE).quantityInStock
   const consomme = fromageAvant - fromageApres
 
   check(

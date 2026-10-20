@@ -1,4 +1,6 @@
 // Verifie specifiquement la regle : "le premier livreur qui accepte, la commande
+
+const { pizzaDeTest, toujoursOuvert } = require('./fixture');
 // disparait pour les autres". On envoie 2 requetes /accept EN PARALLELE (vraie
 // concurrence reseau, pas simulee) et on verifie qu'une seule reussit.
 
@@ -29,7 +31,7 @@ async function run() {
   const managerToken = managerLogin.data.token;
 
   const products = await req('GET', '/products');
-  const margherita = products.data.find((p) => p.name === 'Pizza Margherita');
+  const margherita = await pizzaDeTest(managerToken);
 
   const cashierLogin = await req('POST', '/auth/login-code', { loginCode: '1234' });
   const cashierToken = cashierLogin.data.token;
@@ -50,15 +52,6 @@ async function run() {
   // en reutilisant le meme secret que le serveur (charge depuis le meme .env).
   require('dotenv').config({ path: __dirname + '/../.env' });
   const jwt = require('jsonwebtoken');
-
-/** Semaine entierement ouverte : les tests ne dependent pas de l'heure. */
-function toujoursOuvert() {
-  return Object.fromEntries(
-    ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [
-      d, { open: '00:00', close: '23:59', closed: false },
-    ])
-  );
-}
   const driver1Token = jwt.sign({ id: d1.data.user.id, role: 'driver', fullName: 'Livreur A' }, process.env.JWT_SECRET, { expiresIn: '1h' });
   const driver2Token = jwt.sign({ id: d2.data.user.id, role: 'driver', fullName: 'Livreur B' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 

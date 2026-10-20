@@ -12,6 +12,7 @@ import { delivery } from '../../lib/api'
 import { emitDriverLocation, joinRoom, on } from '../../lib/socket'
 import { useAuth } from '../../lib/store'
 import { elapsed, haversineKm, money, moneyDT, orderNo } from '../../lib/format'
+import { DeliveryMap } from '../../components/DeliveryMap'
 import type { DriverStats, Order } from '../../lib/types'
 import {
   Button,
@@ -40,10 +41,26 @@ export default function DriverScreen() {
   const user = useAuth((s) => s.user)
   const now = useNow(20000)
 
+  const premierChargement = useRef(true)
+
   const load = useCallback(async () => {
     try {
-      const list = await delivery.available()
+      /**
+       * La course en cours est relue à chaque cycle, pas seulement au
+       * moment où le livreur l'accepte : un rafraîchissement, un téléphone
+       * verrouillé ou une coupure de réseau la faisait disparaître de son
+       * écran alors qu'elle lui restait assignée.
+       */
+      const [list, courante] = await Promise.all([
+        delivery.available(),
+        delivery.mine().catch(() => null),
+      ])
       setAvailable(list)
+      setActive(courante)
+      // On n'impose l'onglet qu'à l'ouverture : ensuite le livreur navigue
+      // où il veut, et un cycle de rafraîchissement ne doit pas le ramener.
+      if (courante && premierChargement.current) setTab('available')
+      premierChargement.current = false
     } catch {
       /* le prochain cycle réessaiera */
     } finally {
@@ -295,6 +312,11 @@ function ActiveDelivery({
 
   const share = order.deliveryFee * 0.7 + order.tipAmount
 
+  const distanceKm =
+    driverPos && order.deliveryLat != null && order.deliveryLng != null
+      ? haversineKm(driverPos.lat, driverPos.lng, order.deliveryLat, order.deliveryLng)
+      : null
+
   const confirm = useCallback(
     async (token: string) => {
       setBusy(true)
@@ -349,6 +371,35 @@ function ActiveDelivery({
       </header>
 
       <div className="mx-auto max-w-xl space-y-4 px-5 py-5">
+        {/* La carte dans l'écran : le livreur voit où il va sans quitter
+            l'application, et garde sous les yeux le montant à encaisser.
+            Le bouton d'itinéraire reste là pour le guidage vocal. */}
+        <div className="overflow-hidden rounded-[13px] border border-ink-700">
+          <DeliveryMap
+            driver={driverPos}
+            destination={
+              order.deliveryLat != null && order.deliveryLng != null
+                ? { lat: order.deliveryLat, lng: order.deliveryLng }
+                : null
+            }
+            className="h-[260px] w-full"
+          />
+          {order.deliveryLat == null && (
+            <p className="bg-ink-800 px-4 py-2.5 text-[12.5px] leading-snug text-ink-400">
+              Le client n'a pas partagé sa position : seule l'adresse écrite est
+              disponible.
+            </p>
+          )}
+          {distanceKm != null && (
+            <div className="flex items-center justify-between gap-3 bg-ink-800 px-4 py-2.5">
+              <span className="text-[12.5px] text-ink-400">À vol d'oiseau</span>
+              <span className="num text-[14px] font-bold text-white">
+                {distanceKm.toFixed(1)} km
+              </span>
+            </div>
+          )}
+        </div>
+
         <div className="rounded-[13px] border border-ink-700 bg-ink-800 p-4">
           <p className="text-[12.5px] font-semibold text-ink-500">Destination</p>
           <p className="mt-1 text-[16px] leading-snug font-semibold text-white">

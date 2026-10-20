@@ -1,18 +1,11 @@
 // Test de bout en bout : le parcours complet d'une commande en livraison,
+
+const { pizzaDeTest, toujoursOuvert } = require('./fixture');
 // du panier client jusqu'au versement de la commission au livreur.
 
 const { Client } = require('pg');
 require('dotenv').config({ path: __dirname + '/../.env' });
 const jwt = require('jsonwebtoken');
-
-/** Semaine entierement ouverte : les tests ne dependent pas de l'heure. */
-function toujoursOuvert() {
-  return Object.fromEntries(
-    ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [
-      d, { open: '00:00', close: '23:59', closed: false },
-    ])
-  );
-}
 
 const BASE = 'http://localhost:4000/api';
 let pass = 0, fail = 0;
@@ -70,7 +63,7 @@ async function run() {
 
   // --- Etape 1 : le client commande avec livraison ---
   const products = await req('GET', '/products');
-  const pizza = products.data.find((p) => p.name === 'Pizza Margherita');
+  const pizza = await pizzaDeTest(managerToken);
 
 
 /**
@@ -91,8 +84,13 @@ async function run() {
 
   check(order.status === 201, 'Le client passe une commande en livraison');
   check(order.data.subtotal === 36, 'Sous-total correct (2 pizzas a 18 DT)');
-  check(order.data.deliveryFee === 7, 'Frais de livraison appliques');
-  check(order.data.totalAmount === 43, 'Total = 36 + 7 = 43 DT');
+  // Les frais viennent de la zone choisie, plus d'une constante du code.
+  const frais = zoneLivraison.fee;
+  check(order.data.deliveryFee === frais, `Frais de livraison appliques (${frais} DT)`);
+  check(
+    Math.abs(order.data.totalAmount - (order.data.subtotal + frais)) < 0.01,
+    'Total = sous-total + frais de la zone'
+  );
   const orderId = order.data.id;
   const orderQr = order.data.qrToken;
 
@@ -130,7 +128,10 @@ async function run() {
   // --- Etape 8 : le client ajoute un pourboire ---
   const tipped = await req('POST', `/delivery/${orderId}/tip`, { tipAmount: 3 }, customerToken);
   check(tipped.data.tipAmount === 3, 'Le client ajoute un pourboire de 3 DT');
-  check(tipped.data.totalAmount === 46, 'Le total est recalcule : 36 + 7 + 3 = 46 DT');
+  check(
+    Math.abs(tipped.data.totalAmount - (tipped.data.subtotal + frais + 3)) < 0.01,
+    'Le total est recalcule avec le pourboire'
+  );
 
   // --- Etape 9 : mauvais QR refuse ---
   const badQr = await req('POST', `/delivery/${orderId}/confirm-delivery`, { qrToken: 'faux-token' }, driverToken);
@@ -143,11 +144,14 @@ async function run() {
 
   // --- Etape 11 : commission du livreur ---
   const stats = await req('GET', '/delivery/my-stats', null, driverToken);
-  const expectedEarning = 7 * 0.7 + 3; // 70% des frais + pourboire = 4.9 + 3 = 7.9
+  const expectedEarning = frais * 0.7 + 3; // 70 % des frais de la zone + pourboire
   check(Math.abs(stats.data.totalDriverEarnings - expectedEarning) < 0.01,
     `Commission correcte : 70% de 7 DT + 3 DT de pourboire = ${expectedEarning.toFixed(2)} DT (recu: ${stats.data.totalDriverEarnings.toFixed(2)})`);
   check(stats.data.deliveriesCount === 1, 'Une livraison comptabilisee dans l\'historique');
-  check(Math.abs(stats.data.totalCollected - 46) < 0.01, 'Montant total encaisse par le livreur : 46 DT');
+  check(
+    Math.abs(stats.data.totalCollected - tipped.data.totalAmount) < 0.01,
+    'Montant total encaisse par le livreur'
+  );
 
   // --- Etape 12 : le client suit sa commande ---
   const tracked = await req('GET', `/orders/${orderId}`, null, customerToken);

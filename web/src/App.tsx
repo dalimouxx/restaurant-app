@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { Spinner, ToastHost } from './components/ui'
 import { PrintHost } from './components/PrintHost'
+import { InstallBanner } from './components/InstallBanner'
 import { Shell, type NavItem } from './components/Shell'
 import { useAuth } from './lib/store'
 import type { Role } from './lib/types'
@@ -277,6 +278,7 @@ export default function App() {
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        <InstallBanner />
         </Suspense>
       </BrowserRouter>
       </PrintHost>
