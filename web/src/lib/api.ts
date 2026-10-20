@@ -10,8 +10,12 @@ import type {
   DriverStats,
   Ingredient,
   NetProfitReport,
+  InventoryLine,
   Order,
   PaymentMethod,
+  PeakHours,
+  PeriodComparison,
+  ProductMargin,
   Product,
   ProductOption,
   RecipeLine,
@@ -443,6 +447,18 @@ export const stock = {
       method: 'POST',
       body: { quantity, note, type },
     }),
+  wasteReasons: () => request<CancelReason[]>('/stock/waste-reasons'),
+  declareWaste: (id: string, quantity: number, reason: string) =>
+    request<Ingredient>(`/stock/${id}/waste`, {
+      method: 'POST',
+      body: { quantity, reason },
+    }),
+  inventory: (counts: { ingredientId: string; counted: number }[]) =>
+    request<{ lines: InventoryLine[]; value: number; shortages: number }>(
+      '/stock/inventory',
+      { method: 'POST', body: { counts } },
+    ),
+
   movements: (id: string) =>
     request<
       { id: string; type: string; quantity: number; note?: string; createdAt: string }[]
@@ -460,6 +476,24 @@ export const reports = {
     return request<NetProfitReport>(`/reports/net-profit${q ? `?${q}` : ''}`)
   },
   topProducts: () => request<TopProduct[]>('/reports/top-products'),
+  peakHours: (days = 7) => request<PeakHours>(`/reports/peak-hours?days=${days}`),
+  margins: () => request<ProductMargin[]>('/reports/margins'),
+  compare: (days = 7) => request<PeriodComparison>(`/reports/compare?days=${days}`),
+
+  /**
+   * Export comptable. Le téléchargement passe par un blob : le jeton est
+   * dans l'en-tête, pas dans l'adresse, donc un simple lien ne suffirait pas.
+   */
+  exportCsv: async (from?: Date, to?: Date) => {
+    const p = new URLSearchParams()
+    if (from) p.set('from', from.toISOString())
+    if (to) p.set('to', to.toISOString())
+    const res = await fetch(`${API}/reports/export${p.toString() ? `?${p}` : ''}`, {
+      headers: { Authorization: `Bearer ${getToken() ?? ''}` },
+    })
+    if (!res.ok) throw new ApiError('Export impossible.', res.status)
+    return res.blob()
+  },
 
   /** Registre des opérations sensibles, en lecture seule. */
   audit: (filters: { action?: string; limit?: number } = {}) => {

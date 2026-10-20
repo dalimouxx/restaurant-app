@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Package, Plus } from 'lucide-react'
+import { AlertTriangle, ClipboardList, Package, Plus, TriangleAlert } from 'lucide-react'
 import { stock } from '../../lib/api'
 import { money } from '../../lib/format'
 import type { Ingredient } from '../../lib/types'
@@ -14,6 +14,7 @@ import {
   Skeleton,
   useToast,
 } from '../../components/ui'
+import { InventoryModal, WasteModal } from './InventoryModal'
 
 const UNITS = [
   { value: 'piece', label: 'pièce' },
@@ -28,6 +29,8 @@ export default function StockPage() {
   const [loading, setLoading] = useState(true)
   const [restocking, setRestocking] = useState<Ingredient | null>(null)
   const [creating, setCreating] = useState(false)
+  const [inventorying, setInventorying] = useState(false)
+  const [wasting, setWasting] = useState<Ingredient | null>(null)
   const { notify } = useToast()
 
   const load = useCallback(async () => {
@@ -52,9 +55,19 @@ export default function StockPage() {
         <p className="text-[13.5px] text-ink-500">
           {items.length} référence{items.length > 1 ? 's' : ''} suivies
         </p>
-        <Button icon={Plus} onClick={() => setCreating(true)}>
-          Nouvel ingrédient
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            icon={ClipboardList}
+            disabled={items.length === 0}
+            onClick={() => setInventorying(true)}
+          >
+            Inventaire
+          </Button>
+          <Button icon={Plus} onClick={() => setCreating(true)}>
+            Nouvel ingrédient
+          </Button>
+        </div>
       </div>
 
       {low.length > 0 && (
@@ -93,7 +106,12 @@ export default function StockPage() {
       ) : (
         <Card className="divide-y divide-ink-100">
           {items.map((it) => (
-            <StockRow key={it.id} item={it} onRestock={() => setRestocking(it)} />
+            <StockRow
+              key={it.id}
+              item={it}
+              onRestock={() => setRestocking(it)}
+              onWaste={() => setWasting(it)}
+            />
           ))}
         </Card>
       )}
@@ -106,6 +124,21 @@ export default function StockPage() {
           load()
         }}
       />
+      <InventoryModal
+        open={inventorying}
+        ingredients={items}
+        onClose={() => setInventorying(false)}
+        onDone={load}
+      />
+      <WasteModal
+        ingredient={wasting}
+        onClose={() => setWasting(null)}
+        onDone={() => {
+          setWasting(null)
+          load()
+        }}
+      />
+
       <CreateModal
         open={creating}
         onClose={() => setCreating(false)}
@@ -118,7 +151,15 @@ export default function StockPage() {
   )
 }
 
-function StockRow({ item, onRestock }: { item: Ingredient; onRestock: () => void }) {
+function StockRow({
+  item,
+  onRestock,
+  onWaste,
+}: {
+  item: Ingredient
+  onRestock: () => void
+  onWaste: () => void
+}) {
   // Jauge relative au seuil : à 100 % on est pile au seuil d'alerte.
   const ratio =
     item.alertThreshold > 0
@@ -156,6 +197,14 @@ function StockRow({ item, onRestock }: { item: Ingredient; onRestock: () => void
         {money(item.costPerUnit)} DT/{item.unit}
       </span>
 
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={TriangleAlert}
+        aria-label="Déclarer une perte"
+        title="Déclarer une perte"
+        onClick={onWaste}
+      />
       <Button variant="secondary" size="sm" onClick={onRestock}>
         Réappro
       </Button>

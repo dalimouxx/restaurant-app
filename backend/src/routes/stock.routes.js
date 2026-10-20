@@ -7,6 +7,7 @@ const {
   ProductOption,
 } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const audit = require('../audit');
 
 const router = express.Router();
 
@@ -77,6 +78,146 @@ router.get('/:id/movements', requireAuth, requireRole('manager', 'admin', 'super
   });
   res.json(movements);
 });
+
+/**
+ * Motifs de perte, fermes.
+ *
+ * Un ingredient sort du stock sans vente : casse, brule, perime, repas du
+ * personnel. Sans ces motifs, le gerant voit un stock qui fond sans
+ * jamais savoir pourquoi, et ne peut pas distinguer un probleme de
+ * conservation d'un probleme de personnel.
+ */
+const WASTE_REASONS = {
+  broken: 'Cassé',
+  burnt: 'Brûlé ou raté',
+  expired: 'Périmé',
+  staff: 'Repas du personnel',
+  error: 'Erreur de préparation',
+};
+
+router.get('/waste-reasons', requireAuth, async (req, res) => {
+  res.json(Object.entries(WASTE_REASONS).map(([code, label]) => ({ code, label })));
+});
+
+/** Declare une perte : le stock baisse, le benefice net en tient compte. */
+router.post(
+  '/:id/waste',
+  requireAuth,
+  requireRole('cook', 'manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const reason = String(req.body.reason ?? '');
+    if (!WASTE_REASONS[reason]) {
+      return res.status(400).json({ error: 'Motif de perte invalide.' });
+    }
+    const quantity = Number(String(req.body.quantity ?? '').replace(',', '.'));
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      return res.status(400).json({ error: 'Quantité invalide.' });
+    }
+
+    const ingredient = await Ingredient.findByPk(req.params.id);
+    if (!ingredient) return res.status(404).json({ error: 'Ingrédient introuvable.' });
+
+    ingredient.quantityInStock = Math.max(0, ingredient.quantityInStock - quantity);
+    await ingredient.save();
+
+    await StockMovement.create({
+      ingredientId: ingredient.id,
+      type: 'waste',
+      quantity: -quantity,
+      note: WASTE_REASONS[reason],
+    });
+
+    await audit.record(req, {
+      action: 'stock.waste',
+      entityType: 'ingredient',
+      entityId: ingredient.id,
+      summary:
+        `Perte de ${quantity} ${ingredient.unit} de ${ingredient.name} ` +
+        `(${WASTE_REASONS[reason]})`,
+      details: {
+        name: ingredient.name,
+        quantity,
+        unit: ingredient.unit,
+        reason,
+        value: Math.round(quantity * ingredient.costPerUnit * 1000) / 1000,
+      },
+    });
+
+    await refreshProductsAvailability();
+    res.json(ingredient);
+  }
+);
+
+/**
+ * Inventaire physique.
+ *
+ * On compte reellement, et l'ecart avec le stock theorique se voit. C'est
+ * la seule facon de reperer la demarque : tant que personne ne compte, un
+ * stock theorique parfait peut cacher n'importe quoi.
+ */
+router.post(
+  '/inventory',
+  requireAuth,
+  requireRole('manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const comptes = Array.isArray(req.body.counts) ? req.body.counts : [];
+    if (comptes.length === 0) {
+      return res.status(400).json({ error: 'Aucun comptage fourni.' });
+    }
+
+    const lignes = [];
+    let valeurEcart = 0;
+
+    for (const ligne of comptes) {
+      const compte = Number(String(ligne.counted ?? '').replace(',', '.'));
+      if (!Number.isFinite(compte) || compte < 0) continue;
+
+      const ingredient = await Ingredient.findByPk(ligne.ingredientId);
+      if (!ingredient) continue;
+
+      const theorique = ingredient.quantityInStock;
+      const ecart = Math.round((compte - theorique) * 1000) / 1000;
+      if (Math.abs(ecart) >= 0.001) {
+        ingredient.quantityInStock = compte;
+        await ingredient.save();
+        await StockMovement.create({
+          ingredientId: ingredient.id,
+          type: 'adjustment',
+          quantity: ecart,
+          note: 'Inventaire physique',
+        });
+      }
+
+      valeurEcart += ecart * ingredient.costPerUnit;
+      lignes.push({
+        ingredientId: ingredient.id,
+        name: ingredient.name,
+        unit: ingredient.unit,
+        expected: theorique,
+        counted: compte,
+        gap: ecart,
+        value: Math.round(ecart * ingredient.costPerUnit * 1000) / 1000,
+      });
+    }
+
+    valeurEcart = Math.round(valeurEcart * 1000) / 1000;
+    const manquants = lignes.filter((l) => l.gap < 0).length;
+
+    await audit.record(req, {
+      action: 'stock.inventory',
+      entityType: 'inventory',
+      summary:
+        `Inventaire sur ${lignes.length} référence(s) — ` +
+        (Math.abs(valeurEcart) < 0.001
+          ? 'aucun écart'
+          : `${valeurEcart > 0 ? 'excédent' : 'manquant'} de ${Math.abs(valeurEcart).toFixed(3)} DT`),
+      details: { lines: lignes.length, shortages: manquants, value: valeurEcart },
+    });
+
+    await refreshProductsAvailability();
+    res.json({ lines: lignes, value: valeurEcart, shortages: manquants });
+  }
+);
 
 /**
  * Quantite de chaque ingredient qu'une ligne de commande consomme.

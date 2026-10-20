@@ -13,6 +13,12 @@ import { reports } from '../../lib/api'
 import { money, moneyDT } from '../../lib/format'
 import type { Ingredient, NetProfitReport, TopProduct } from '../../lib/types'
 import { Card, EmptyState, SectionTitle, Skeleton } from '../../components/ui'
+import {
+  ComparisonCard,
+  ExportButton,
+  MarginsCard,
+  PeakHoursCard,
+} from './InsightsCards'
 
 type Period = 'today' | 'week' | 'month' | 'all'
 
@@ -67,6 +73,10 @@ export default function FinancePage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+      <div className="mb-3 flex justify-end">
+        <ExportButton from={periodStart(period)} />
+      </div>
+
       <div className="mb-5 flex gap-1 rounded-[10px] border border-ink-200 bg-white p-1">
         {PERIODS.map((p) => (
           <button
@@ -95,7 +105,7 @@ export default function FinancePage() {
           description="Vérifiez que le serveur répond."
         />
       ) : (
-        <div className="space-y-5">
+        <div className="space-y-6">
           {/* Bénéfice net */}
           <div className="rounded-[15px] bg-ink-900 p-6">
             <p className="text-[13px] text-ink-400">Bénéfice net</p>
@@ -253,6 +263,9 @@ export default function FinancePage() {
               </Card>
             )}
           </div>
+          <ComparisonCard days={7} />
+          <PeakHoursCard days={7} />
+          <MarginsCard />
         </div>
       )}
     </div>

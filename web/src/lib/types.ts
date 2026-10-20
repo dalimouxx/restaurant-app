@@ -186,9 +186,59 @@ export interface NetProfitReport {
   totalRevenue: number
   totalDiscounts?: number
   ingredientCost: number
+  wasteCost?: number
   driverPayout: number
   netProfit: number
   ordersCount: number
+}
+
+/** Une heure de service, avec ce qu'elle a produit. */
+export interface PeakHour {
+  hour: number
+  orders: number
+  revenue: number
+}
+
+export interface PeakHours {
+  days: number
+  hours: PeakHour[]
+  busiest: PeakHour | null
+}
+
+/** Ce que rapporte un plat, une fois ses ingrédients payés. */
+export interface ProductMargin {
+  id: string
+  name: string
+  price: number
+  cost: number
+  margin: number
+  marginPercent: number
+  hasRecipe: boolean
+  soldCount: number
+  totalMargin: number
+}
+
+/** Comparaison avec la période précédente. */
+export interface PeriodComparison {
+  days: number
+  current: { orders: number; revenue: number; averageTicket: number }
+  previous: { orders: number; revenue: number; averageTicket: number }
+  change: {
+    revenue: number | null
+    orders: number | null
+    averageTicket: number | null
+  }
+}
+
+/** Une ligne d'inventaire physique : théorique contre compté. */
+export interface InventoryLine {
+  ingredientId: string
+  name: string
+  unit: string
+  expected: number
+  counted: number
+  gap: number
+  value: number
 }
 
 export interface TopProduct {
