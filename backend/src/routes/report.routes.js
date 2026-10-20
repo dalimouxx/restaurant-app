@@ -24,7 +24,13 @@ router.get('/net-profit', requireAuth, requireRole('manager', 'admin', 'super_ad
     },
   });
 
-  const totalRevenue = orders.reduce((sum, o) => sum + o.subtotal + o.deliveryFee, 0);
+  // Une remise accordee n'est jamais encaissee : la compter dans le chiffre
+  // d'affaires ferait croire a une marge que personne n'a touchee.
+  const totalDiscounts = orders.reduce((sum, o) => sum + (o.discountAmount || 0), 0);
+  const totalRevenue = orders.reduce(
+    (sum, o) => sum + o.subtotal - (o.discountAmount || 0) + o.deliveryFee,
+    0
+  );
   const totalDeliveryFees = orders.reduce((sum, o) => sum + o.deliveryFee, 0);
   const driverPayout = totalDeliveryFees * (DRIVER_COMMISSION_PERCENT / 100);
 
@@ -53,6 +59,7 @@ router.get('/net-profit', requireAuth, requireRole('manager', 'admin', 'super_ad
 
   res.json({
     totalRevenue,
+    totalDiscounts,
     ingredientCost,
     driverPayout,
     netProfit,

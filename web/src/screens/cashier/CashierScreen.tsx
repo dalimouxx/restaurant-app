@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Banknote,
   Check,
@@ -37,6 +37,8 @@ import {
 } from '../../components/ui'
 import { NewOrderPanel } from './NewOrderPanel'
 import { TodayPanel } from './TodayPanel'
+import { CashCountGrid, useCashCount } from './CashCount'
+import { DiscountModal } from './DiscountModal'
 import { usePrint } from '../../components/PrintHost'
 import { useAuth } from '../../lib/store'
 
@@ -158,7 +160,9 @@ function Register({
   const [closing, setClosing] = useState(false)
   const [takingOrder, setTakingOrder] = useState(false)
   /** Onglet de la colonne de gauche : la file, ou le service du jour. */
-  const [tab, setTab] = useState<'queue' | 'today'>('queue')
+  const [tab, setTab] = useState<'queue' | 'parked' | 'today'>('queue')
+  const [parked, setParked] = useState<Order[]>([])
+  const [discounting, setDiscounting] = useState<Order | null>(null)
   /** Incrémenté à chaque encaissement : l'historique se recharge. */
   const [serviceVersion, setServiceVersion] = useState(0)
   const { notify } = useToast()
@@ -189,8 +193,12 @@ function Register({
 
   const load = useCallback(async () => {
     try {
-      const list = await orders.pendingPayment()
+      const [list, garees] = await Promise.all([
+        orders.pendingPayment(),
+        orders.parked().catch(() => []),
+      ])
       setQueue(list)
+      setParked(garees)
       setSelectedId((cur) => (cur && list.some((o) => o.id === cur) ? cur : list[0]?.id ?? null))
     } catch {
       /* le temps réel ou le prochain cycle rattrapera */
@@ -236,10 +244,49 @@ function Register({
     return () => window.removeEventListener('keydown', onKey)
   }, [queue, selectedId])
 
+  /** Range la commande de côté, ou la ramène dans la file. */
+  async function park(order: Order, parked = true) {
+    try {
+      await orders.park(order.id, parked)
+      notify(parked ? 'Commande mise en attente.' : 'Commande reprise.', 'success')
+      if (!parked) setSelectedId(order.id)
+      setTab(parked ? 'queue' : 'queue')
+      load()
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Action refusée.', 'error')
+    }
+  }
+
+  async function split(order: Order, parts: number) {
+    try {
+      const maj = await orders.split(order.id, parts)
+      setQueue((q) => q.map((o) => (o.id === maj.id ? maj : o)))
+      notify(parts > 1 ? `Addition partagée en ${parts}.` : 'Partage annulé.', 'info')
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Partage refusé.', 'error')
+    }
+  }
+
   async function pay(method: PaymentMethod) {
     if (!selected) return
     try {
       const paid = await orders.pay(selected.id, method)
+
+      // Une addition partagée reste ouverte tant que toutes les parts
+      // ne sont pas réglées : le premier qui paie n'emporte pas la
+      // commande des autres.
+      const resteDesParts =
+        (paid.splitCount ?? 1) > 1 && (paid.splitPaidCount ?? 0) < (paid.splitCount ?? 1)
+
+      if (resteDesParts) {
+        notify(
+          `Part ${paid.splitPaidCount} sur ${paid.splitCount} encaissée.`,
+          'success',
+        )
+        setQueue((q) => q.map((o) => (o.id === paid.id ? paid : o)))
+        return
+      }
+
       notify(`${orderNo(selected.orderNumber)} encaissée, envoyée en cuisine.`, 'success')
 
       // Le reçu part dès l'encaissement : c'est le moment où le client
@@ -271,6 +318,14 @@ function Register({
                 </span>
               )}
             </TabButton>
+            {parked.length > 0 && (
+              <TabButton active={tab === 'parked'} onClick={() => setTab('parked')}>
+                Garées
+                <span className="num ml-1.5 rounded-full bg-saffron-500 px-1.5 text-[11px] text-ink-900">
+                  {parked.length}
+                </span>
+              </TabButton>
+            )}
             <TabButton active={tab === 'today'} onClick={() => setTab('today')}>
               Aujourd'hui
             </TabButton>
@@ -300,6 +355,30 @@ function Register({
         <div className="min-h-0 flex-1 overflow-y-auto">
           {tab === 'today' ? (
             <TodayPanel reloadKey={serviceVersion} />
+          ) : tab === 'parked' ? (
+            <ul>
+              {parked.map((o) => (
+                <li
+                  key={o.id}
+                  className="flex items-center gap-3 border-b border-ink-100 px-4 py-3"
+                >
+                  <span className="num w-11 shrink-0 text-[16px] font-bold text-ink-900">
+                    {orderNo(o.orderNumber)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="num text-[13.5px] font-semibold text-ink-900">
+                      {money(o.totalAmount)} DT
+                    </p>
+                    <p className="text-[12px] text-ink-400">
+                      En attente depuis {elapsed(o.updatedAt, now)}
+                    </p>
+                  </div>
+                  <Button variant="secondary" size="sm" onClick={() => park(o, false)}>
+                    Reprendre
+                  </Button>
+                </li>
+              ))}
+            </ul>
           ) : loading ? (
             <div className="space-y-2 p-4">
               {[0, 1, 2].map((i) => (
@@ -386,6 +465,9 @@ function Register({
             onPrint={() =>
               print({ order: selected, kind: 'receipt', cashierName: user?.fullName })
             }
+            onDiscount={() => setDiscounting(selected)}
+            onPark={() => park(selected)}
+            onSplit={(parts) => split(selected, parts)}
           />
         ) : (
           <EmptyState
@@ -400,6 +482,15 @@ function Register({
         open={takingOrder}
         onClose={() => setTakingOrder(false)}
         onCreated={() => load()}
+      />
+
+      <DiscountModal
+        order={discounting}
+        onClose={() => setDiscounting(null)}
+        onApplied={(maj) => {
+          setDiscounting(null)
+          setQueue((q) => q.map((o) => (o.id === maj.id ? maj : o)))
+        }}
       />
 
       <CloseSession
@@ -442,13 +533,32 @@ function PaymentPanel({
   order,
   onPay,
   onPrint,
+  onDiscount,
+  onPark,
+  onSplit,
 }: {
   order: Order
   onPay: (method: PaymentMethod) => void
   onPrint: () => void
+  onDiscount: () => void
+  onPark: () => void
+  onSplit: (parts: number) => void
 }) {
   const [tendered, setTendered] = useState('')
-  const due = order.subtotal
+
+  const remise = order.discountAmount ?? 0
+  const parts = order.splitCount ?? 1
+  const reglees = order.splitPaidCount ?? 0
+
+  /**
+   * Ce qu'il reste à encaisser maintenant. Sur une addition partagée,
+   * c'est la part en cours, pas le total : le caissier ne doit jamais
+   * avoir à diviser de tête devant le client.
+   */
+  const due =
+    parts > 1
+      ? Math.round((order.totalAmount / parts) * 1000) / 1000
+      : order.totalAmount
   const received = Number(tendered.replace(',', '.')) || 0
   const change = received - due
   const enough = received >= due
@@ -543,12 +653,77 @@ function PaymentPanel({
             })}
           </ul>
 
-          <div className="mt-5 border-t border-ink-100 pt-4">
-            <div className="flex items-baseline justify-between">
-              <span className="text-[15px] font-semibold text-ink-600">À payer</span>
+          <div className="mt-5 space-y-1.5 border-t border-ink-100 pt-4">
+            {remise > 0 && (
+              <>
+                <div className="flex items-baseline justify-between text-[13.5px]">
+                  <span className="text-ink-500">Sous-total</span>
+                  <span className="num text-ink-700">{moneyDT(order.subtotal)}</span>
+                </div>
+                <div className="flex items-baseline justify-between text-[13.5px]">
+                  <span className="font-semibold text-coral-600">Remise</span>
+                  <span className="num font-semibold text-coral-600">
+                    −{moneyDT(remise)}
+                  </span>
+                </div>
+              </>
+            )}
+
+            <div className="flex items-baseline justify-between pt-1">
+              <span className="text-[15px] font-semibold text-ink-600">
+                {parts > 1 ? `Part ${reglees + 1} sur ${parts}` : 'À payer'}
+              </span>
               <span className="num text-[30px] font-extrabold tracking-[-0.025em] text-ink-900">
                 {moneyDT(due)}
               </span>
+            </div>
+
+            {parts > 1 && (
+              <p className="text-[12.5px] text-ink-500">
+                Addition de <span className="num">{moneyDT(order.totalAmount)}</span> partagée
+                en {parts}
+                {reglees > 0 && ` · ${reglees} déjà réglée${reglees > 1 ? 's' : ''}`}
+              </p>
+            )}
+          </div>
+
+          {/* Actions du caissier : tout se touche, rien ne s'écrit. */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            <button
+              onClick={onDiscount}
+              className={`h-9 rounded-[8px] border px-3 text-[12.5px] font-bold transition-colors ${
+                remise > 0
+                  ? 'border-coral-500 bg-coral-50 text-coral-700'
+                  : 'border-ink-200 text-ink-600 hover:border-coral-400 hover:text-coral-700'
+              }`}
+            >
+              {remise > 0 ? 'Remise accordée' : 'Remise'}
+            </button>
+
+            <button
+              onClick={onPark}
+              disabled={reglees > 0}
+              className="h-9 rounded-[8px] border border-ink-200 px-3 text-[12.5px] font-bold text-ink-600 transition-colors hover:border-saffron-500 hover:text-saffron-700 disabled:opacity-40"
+            >
+              Mettre en attente
+            </button>
+
+            <div className="flex items-center gap-1.5 rounded-[8px] border border-ink-200 px-2">
+              <span className="text-[12px] text-ink-500">Partager</span>
+              {[1, 2, 3, 4].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => onSplit(n)}
+                  disabled={n < reglees}
+                  className={`num size-7 rounded-[6px] text-[12.5px] font-bold transition-colors disabled:opacity-30 ${
+                    parts === n
+                      ? 'bg-petrol-600 text-white'
+                      : 'text-ink-600 hover:bg-ink-100'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -644,29 +819,29 @@ function CloseSession({
   onClose: () => void
   onClosed: () => void
 }) {
-  const [counted, setCounted] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<CashSession | null>(null)
   const { notify } = useToast()
-  const inputRef = useRef<HTMLInputElement>(null)
+  const { compte, setCompte, total, pieces, remettre } = useCashCount()
 
   useEffect(() => {
     if (open) {
-      setCounted('')
+      remettre()
       setResult(null)
-      setTimeout(() => inputRef.current?.focus(), 60)
     }
+    // `remettre` est stable : la dépendance volontairement réduite à
+    // l'ouverture évite de vider le comptage à chaque rendu.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   async function submit() {
-    const value = Number(counted.replace(',', '.'))
-    if (!Number.isFinite(value)) {
-      notify('Entrez le montant compté dans le tiroir.', 'error')
+    if (pieces === 0) {
+      notify('Comptez le tiroir avant de clôturer.', 'error')
       return
     }
     setBusy(true)
     try {
-      setResult(await cashier.close(value))
+      setResult(await cashier.close(total, compte))
     } catch (e) {
       notify(e instanceof Error ? e.message : 'Clôture impossible.', 'error')
     } finally {
@@ -720,7 +895,8 @@ function CloseSession({
       open={open}
       onClose={onClose}
       title="Clôturer la caisse"
-      description="Comptez le tiroir, y compris le fond de départ."
+      width="max-w-lg"
+      description="Comptez le tiroir, fond de départ compris."
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -732,29 +908,14 @@ function CloseSession({
         </>
       }
     >
-      <p className="mb-4 text-[13.5px] text-ink-500">
+      <p className="mb-3 text-[13.5px] text-ink-500">
         Ouverte à {timeShort(session.openedAt)} avec un fond de{' '}
         <span className="num font-semibold text-ink-700">
           {moneyDT(session.openingFloat)}
         </span>
-        .
+        . Pointez ce que vous avez, le total se fait tout seul.
       </p>
-      <Field label="Montant compté">
-        <div className="relative">
-          <Input
-            ref={inputRef}
-            inputMode="decimal"
-            value={counted}
-            onChange={(e) => setCounted(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submit()}
-            placeholder="0,00"
-            className="num h-14 pr-12 text-[22px] font-bold"
-          />
-          <span className="absolute top-1/2 right-4 -translate-y-1/2 text-[15px] font-semibold text-ink-400">
-            DT
-          </span>
-        </div>
-      </Field>
+      <CashCountGrid compte={compte} onChange={setCompte} total={total} />
     </Modal>
   )
 }

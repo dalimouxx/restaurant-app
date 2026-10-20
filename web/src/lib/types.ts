@@ -146,12 +146,23 @@ export interface Order {
   customerName?: string | null
   customerPhone?: string | null
   deliveryZoneId?: string | null
+  discountAmount?: number
+  discountReason?: string | null
+  isParked?: boolean
+  splitCount?: number
+  splitPaidCount?: number
+  splitPayments?: { method: PaymentMethod; amount: number; at: string }[] | null
   cancelReason?: string | null
   cancelledById?: string | null
   cancelledAt?: string | null
   createdAt: string
   updatedAt: string
   items?: OrderItem[]
+}
+
+/** Coupures tunisiennes, pour le comptage de clôture. */
+export interface CashCount {
+  [denomination: string]: number
 }
 
 export interface CashSession {
@@ -164,10 +175,12 @@ export interface CashSession {
   isOpen: boolean
   openedAt: string
   closedAt?: string | null
+  countBreakdown?: CashCount | null
 }
 
 export interface NetProfitReport {
   totalRevenue: number
+  totalDiscounts?: number
   ingredientCost: number
   driverPayout: number
   netProfit: number

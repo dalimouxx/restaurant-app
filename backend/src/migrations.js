@@ -66,6 +66,33 @@ const STATEMENTS = [
   `ALTER TABLE orders
      ADD COLUMN IF NOT EXISTS "deliveryZoneId" UUID`,
 
+  // Remise accordee au client, avec son motif et son auteur.
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "discountAmount" DOUBLE PRECISION NOT NULL DEFAULT 0`,
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "discountReason" VARCHAR(255)`,
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "discountById" UUID`,
+
+  // Commande garee, et addition partagee.
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "isParked" BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "splitCount" INTEGER NOT NULL DEFAULT 1`,
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "splitPaidCount" INTEGER NOT NULL DEFAULT 0`,
+
+  `ALTER TABLE orders
+     ADD COLUMN IF NOT EXISTS "splitPayments" JSONB`,
+
+  // Detail du comptage des especes a la cloture.
+  `ALTER TABLE cash_sessions
+     ADD COLUMN IF NOT EXISTS "countBreakdown" JSONB`,
+
+  // Temps de preparation annonce par plat.
+  `ALTER TABLE products
+     ADD COLUMN IF NOT EXISTS "prepMinutes" INTEGER NOT NULL DEFAULT 0`,
+
   // Remise au stock apres annulation. Un type a part, et non un simple
   // ajustement : le calcul du benefice net doit pouvoir deduire ce qui n'a
   // finalement pas ete consomme, sans confondre avec une correction a la main.

@@ -13,7 +13,7 @@ set -u
 
 cd "$(dirname "$0")/.." || exit 1
 
-SERIES=(integration options settings menu cancel service delivery-race e2e-delivery web-contract securite)
+SERIES=(integration options settings menu cancel service caisse delivery-race e2e-delivery web-contract securite)
 LOGS=$(mktemp -d)
 total_ok=0
 total_ko=0

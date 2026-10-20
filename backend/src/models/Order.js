@@ -45,6 +45,23 @@ const Order = sequelize.define('Order', {
   driverId: { type: DataTypes.UUID, allowNull: true },
 
   subtotal: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+
+  /** Remise accordee, en dinars. Le motif est choisi dans une liste fermee. */
+  discountAmount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+  discountReason: { type: DataTypes.STRING, allowNull: true },
+  discountById: { type: DataTypes.UUID, allowNull: true },
+
+  /** Garee : le client est parti chercher de l'argent. Elle quitte la file
+   *  active sans etre annulee, et y revient d'un geste. */
+  isParked: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+
+  /** Addition partagee : nombre de parts, et combien sont deja reglees. */
+  splitCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
+  splitPaidCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  /** Chaque part reglee, avec son moyen : une addition peut se partager
+   *  entre une carte et des especes, et le tiroir ne doit compter que ce
+   *  qui y est reellement entre. */
+  splitPayments: { type: DataTypes.JSONB, allowNull: true },
   deliveryFee: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
   tipAmount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
   totalAmount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },

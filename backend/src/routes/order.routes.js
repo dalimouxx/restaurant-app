@@ -296,7 +296,8 @@ router.get('/pending-payment', requireAuth, requireRole('cashier', 'manager', 'a
     include: [{ model: OrderItem, as: 'items' }],
     order: [['createdAt', 'ASC']],
   });
-  res.json(orders);
+  // Les commandes garees restent accessibles, mais hors de la file active.
+  res.json(orders.filter((o) => !o.isParked));
 });
 
 // --- Encaissement d'une commande par le caissier : des validation -> envoi direct en cuisine ---
@@ -308,10 +309,41 @@ router.post('/:id/pay', requireAuth, requireRole('cashier', 'manager', 'admin', 
     return res.status(400).json({ error: 'Cette commande a deja ete traitee.' });
   }
 
+  const methode = paymentMethod || 'cash';
+
+  /**
+   * Addition partagee : chaque part est encaissee a son tour, et peut
+   * l'etre par un moyen different. La commande ne part en cuisine qu'une
+   * fois la derniere part reglee — sinon le premier qui paie emporterait
+   * la commande des autres.
+   */
+  if (order.splitCount > 1) {
+    const partsRestantes = order.splitCount - order.splitPaidCount;
+    const montantPart = Math.round((order.totalAmount / order.splitCount) * 1000) / 1000;
+    // La derniere part absorbe l'arrondi, pour que la somme tombe juste.
+    const montant =
+      partsRestantes === 1
+        ? Math.round((order.totalAmount - montantPart * (order.splitCount - 1)) * 1000) / 1000
+        : montantPart;
+
+    order.splitPayments = [
+      ...(order.splitPayments ?? []),
+      { method: methode, amount: montant, at: new Date().toISOString() },
+    ];
+    order.splitPaidCount += 1;
+    order.cashierId = req.user.id;
+
+    if (order.splitPaidCount < order.splitCount) {
+      await order.save();
+      return res.json(await getFullOrder(order.id));
+    }
+  }
+
   order.status = 'in_kitchen';
-  order.paymentMethod = paymentMethod || 'cash';
+  order.paymentMethod = methode;
   order.paidAt = new Date();
   order.cashierId = req.user.id;
+  order.isParked = false;
   await order.save();
 
   // Deduction du stock au moment ou la commande part reellement en preparation
@@ -346,6 +378,187 @@ router.get('/board', async (req, res) => {
     }))
   );
 });
+
+/** Les commandes garees, en attente du retour du client. */
+router.get(
+  '/parked',
+  requireAuth,
+  requireRole('cashier', 'manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const orders = await Order.findAll({
+      where: {
+        status: 'awaiting_payment',
+        isParked: true,
+        createdAt: { [Op.gte]: new Date(Date.now() - QUEUE_WINDOW_MS) },
+      },
+      include: [{ model: OrderItem, as: 'items' }],
+      order: [['updatedAt', 'DESC']],
+    });
+    res.json(orders);
+  }
+);
+
+/* ─────────── Remise, mise en attente, partage ─────────── */
+
+/**
+ * Motifs de remise, fermes comme ceux d'annulation.
+ *
+ * Un champ libre donnerait « geste » ou « ok », et le gerant ne pourrait
+ * jamais savoir si son equipe offre trois cafes par mois ou trente.
+ */
+const DISCOUNT_REASONS = {
+  gesture: 'Geste commercial',
+  late: 'Plat en retard',
+  kitchen_error: 'Erreur de préparation',
+  loyalty: 'Client fidèle',
+  staff: 'Repas du personnel',
+};
+
+/** Paliers proposes au caissier. Il touche, il ne calcule pas. */
+const DISCOUNT_STEPS = [5, 10, 20, 50, 100];
+
+/**
+ * Au-dela de ce palier, la remise demande un gerant. Un caissier seul ne
+ * doit pas pouvoir offrir une addition entiere : c'est la porte ouverte a
+ * un encaissement qui disparait.
+ */
+const CASHIER_MAX_PERCENT = 20;
+
+router.get('/discount-reasons', requireAuth, async (req, res) => {
+  res.json({
+    reasons: Object.entries(DISCOUNT_REASONS).map(([code, label]) => ({ code, label })),
+    steps: DISCOUNT_STEPS,
+    cashierMaxPercent: CASHIER_MAX_PERCENT,
+  });
+});
+
+function recomputeTotal(order) {
+  const net = Math.max(0, order.subtotal - order.discountAmount);
+  order.totalAmount = Math.round((net + order.deliveryFee + order.tipAmount) * 1000) / 1000;
+}
+
+router.post(
+  '/:id/discount',
+  requireAuth,
+  requireRole('cashier', 'manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const percent = Number(req.body.percent);
+    const reason = String(req.body.reason ?? '');
+
+    if (!DISCOUNT_STEPS.includes(percent)) {
+      throw badRequest('Palier de remise invalide.');
+    }
+    if (!DISCOUNT_REASONS[reason]) {
+      throw badRequest('Motif de remise invalide.');
+    }
+
+    const isManager = ['manager', 'admin', 'super_admin'].includes(req.user.role);
+    if (!isManager && percent > CASHIER_MAX_PERCENT) {
+      return res.status(403).json({
+        error: `Au-delà de ${CASHIER_MAX_PERCENT} %, la remise demande un gérant.`,
+      });
+    }
+
+    const order = await getFullOrder(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
+    if (order.status !== 'awaiting_payment') {
+      throw badRequest('Remise impossible : cette commande est déjà encaissée.');
+    }
+
+    order.discountAmount = Math.round(order.subtotal * (percent / 100) * 1000) / 1000;
+    order.discountReason = reason;
+    order.discountById = req.user.id;
+    recomputeTotal(order);
+    await order.save();
+
+    await audit.record(req, {
+      action: 'order.discounted',
+      entityType: 'order',
+      entityId: order.id,
+      summary:
+        `Remise de ${percent} % sur la commande n° ${order.orderNumber} ` +
+        `(${DISCOUNT_REASONS[reason]}) — ${order.discountAmount.toFixed(3)} DT`,
+      details: {
+        orderNumber: order.orderNumber,
+        percent,
+        amount: order.discountAmount,
+        reason,
+        reasonLabel: DISCOUNT_REASONS[reason],
+        subtotal: order.subtotal,
+      },
+    });
+
+    res.json(await getFullOrder(order.id));
+  }
+);
+
+/** Retire la remise, tant que la commande n'est pas encaissee. */
+router.delete(
+  '/:id/discount',
+  requireAuth,
+  requireRole('cashier', 'manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const order = await getFullOrder(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
+    if (order.status !== 'awaiting_payment') {
+      throw badRequest('Cette commande est déjà encaissée.');
+    }
+    order.discountAmount = 0;
+    order.discountReason = null;
+    order.discountById = null;
+    recomputeTotal(order);
+    await order.save();
+    res.json(await getFullOrder(order.id));
+  }
+);
+
+/**
+ * Mise en attente.
+ *
+ * Le client part chercher de l'argent, un autre attend derriere. La
+ * commande quitte la file active sans etre annulee et y revient d'un
+ * geste : sans cela, le caissier annulait puis ressaisissait tout.
+ */
+router.post(
+  '/:id/park',
+  requireAuth,
+  requireRole('cashier', 'manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
+    if (order.status !== 'awaiting_payment') {
+      throw badRequest('Seule une commande en attente de paiement peut être garée.');
+    }
+    order.isParked = Boolean(req.body.parked ?? true);
+    await order.save();
+    res.json(await getFullOrder(order.id));
+  }
+);
+
+/** Divise l'addition en parts egales. */
+router.post(
+  '/:id/split',
+  requireAuth,
+  requireRole('cashier', 'manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const parts = Number(req.body.parts);
+    if (!Number.isInteger(parts) || parts < 1 || parts > 12) {
+      throw badRequest('Entre 1 et 12 parts.');
+    }
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
+    if (order.status !== 'awaiting_payment') {
+      throw badRequest('Cette commande est déjà encaissée.');
+    }
+    if (parts < order.splitPaidCount) {
+      throw badRequest(`${order.splitPaidCount} part(s) déjà réglée(s).`);
+    }
+    order.splitCount = parts;
+    if (parts === 1) order.splitPaidCount = 0;
+    await order.save();
+    res.json(await getFullOrder(order.id));
+  }
+);
 
 /* ─────────── Annulation ─────────── */
 

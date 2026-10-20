@@ -33,6 +33,10 @@ const Product = sequelize.define('Product', {
    *  rapporte le plus se met en premier. */
   displayOrder: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
 
+  /** Temps de preparation annonce, en minutes. Sert au minuteur de la
+   *  cuisine et au delai donne au client. */
+  prepMinutes: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+
   categoryId: { type: DataTypes.UUID, allowNull: false },
 }, {
   tableName: 'products',

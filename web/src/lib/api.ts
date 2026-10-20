@@ -3,6 +3,7 @@ import type {
   BoardEntry,
   CancelReason,
   CartLine,
+  CashCount,
   CashSession,
   Category,
   DeliveryZone,
@@ -371,6 +372,23 @@ export const orders = {
   /** Écran mural : lecture publique, numéros seulement. */
   board: () => request<BoardEntry[]>('/orders/board', { auth: false }),
   cancelReasons: () => request<CancelReason[]>('/orders/cancel-reasons'),
+
+  /** Commandes garées, en attente du retour du client. */
+  parked: () => request<Order[]>('/orders/parked'),
+  park: (id: string, parked = true) =>
+    request<Order>(`/orders/${id}/park`, { method: 'POST', body: { parked } }),
+
+  discountOptions: () =>
+    request<{ reasons: CancelReason[]; steps: number[]; cashierMaxPercent: number }>(
+      '/orders/discount-reasons',
+    ),
+  applyDiscount: (id: string, percent: number, reason: string) =>
+    request<Order>(`/orders/${id}/discount`, { method: 'POST', body: { percent, reason } }),
+  clearDiscount: (id: string) =>
+    request<Order>(`/orders/${id}/discount`, { method: 'DELETE' }),
+
+  split: (id: string, parts: number) =>
+    request<Order>(`/orders/${id}/split`, { method: 'POST', body: { parts } }),
   cancel: (id: string, reason: string) =>
     request<Order>(`/orders/${id}/cancel`, { method: 'POST', body: { reason } }),
 }
@@ -381,8 +399,11 @@ export const cashier = {
   currentSession: () => request<CashSession | null>('/cashier/current'),
   open: (openingFloat: number) =>
     request<CashSession>('/cashier/open', { method: 'POST', body: { openingFloat } }),
-  close: (closingAmount: number) =>
-    request<CashSession>('/cashier/close', { method: 'POST', body: { closingAmount } }),
+  close: (closingAmount: number, breakdown?: CashCount) =>
+    request<CashSession>('/cashier/close', {
+      method: 'POST',
+      body: { closingAmount, breakdown },
+    }),
 }
 
 /* ─────────── Livraison ─────────── */

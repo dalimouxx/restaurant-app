@@ -4,6 +4,21 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { Op } = require('sequelize');
 const audit = require('../audit');
 
+/**
+ * Part reellement entree dans le tiroir pour une commande.
+ *
+ * Une addition partagee porte le detail de chaque part et de son moyen ;
+ * une commande simple ne compte que si elle a ete reglee en especes.
+ */
+function partEnEspeces(order) {
+  if (Array.isArray(order.splitPayments) && order.splitPayments.length > 0) {
+    return order.splitPayments
+      .filter((p) => p.method === 'cash')
+      .reduce((somme, p) => somme + (Number(p.amount) || 0), 0);
+  }
+  return order.paymentMethod === 'cash' ? order.totalAmount : 0;
+}
+
 const router = express.Router();
 
 // --- Ouverture de caisse : le caissier entre le montant du fond ---
@@ -27,20 +42,31 @@ router.post('/close', requireAuth, requireRole('cashier'), async (req, res) => {
   const session = await CashSession.findOne({ where: { cashierId: req.user.id, isOpen: true } });
   if (!session) return res.status(400).json({ error: 'Aucune session ouverte.' });
 
-  const cashSales = await Order.sum('totalAmount', {
+  /**
+   * Ce qui devrait etre dans le tiroir.
+   *
+   * Calcule ligne a ligne plutot que par une somme SQL : une addition
+   * partagee peut etre reglee moitie carte, moitie especes, et seule la
+   * part en especes est entree dans le tiroir. Une commande annulee a ete
+   * remboursee : l'y compter ferait apparaitre un manquant au caissier a
+   * chaque annulation.
+   */
+  const encaissees = await Order.findAll({
     where: {
       cashierId: req.user.id,
-      paymentMethod: 'cash',
       paidAt: { [Op.gte]: session.openedAt },
-      // Une commande annulee a ete remboursee en especes : l'argent n'est
-      // plus dans le tiroir. L'y compter ferait apparaitre un manquant au
-      // caissier a chaque annulation.
       status: { [Op.ne]: 'cancelled' },
     },
   });
 
-  const expectedAmount = session.openingFloat + (cashSales || 0);
+  const cashSales = encaissees.reduce((somme, o) => somme + partEnEspeces(o), 0);
+  const expectedAmount = Math.round((session.openingFloat + cashSales) * 1000) / 1000;
 
+  // Le detail du comptage est conserve : un ecart doit pouvoir se
+  // reconstituer le lendemain, coupure par coupure.
+  if (req.body.breakdown && typeof req.body.breakdown === 'object') {
+    session.countBreakdown = req.body.breakdown;
+  }
   session.closingAmount = closingAmount;
   session.expectedAmount = expectedAmount;
   session.discrepancy = closingAmount - expectedAmount;
