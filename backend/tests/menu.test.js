@@ -41,10 +41,20 @@ async function run() {
   const cash = cashier.data.token
 
   // Un cuisinier est necessaire : c'est lui qui constate une rupture.
-  const cookCode = String(Date.now()).slice(-4)
-  const cookAccount = await req('POST', '/users', {
-    fullName: `Cuisinier ${tag}`, role: 'cook', loginCode: cookCode,
-  }, mgr)
+  //
+  // Le code est cherche jusqu'a en trouver un libre. Le tirer de
+  // l'horloge semblait suffire, mais il n'y a que dix mille codes a
+  // quatre chiffres : au bout de quelques series de tests on retombe sur
+  // un compte existant, la creation echoue, et le test se connecte alors
+  // au compte de quelqu'un d'autre sans s'en apercevoir.
+  let cookCode = ''
+  let cookAccount = { status: 0 }
+  for (let essai = 0; essai < 25 && cookAccount.status !== 201; essai++) {
+    cookCode = String(Math.floor(1000 + Math.random() * 9000))
+    cookAccount = await req('POST', '/users', {
+      fullName: `Cuisinier ${tag}`, role: 'cook', loginCode: cookCode,
+    }, mgr)
+  }
   const cookLogin = await req('POST', '/auth/login-code', { loginCode: cookCode })
   const cook = cookLogin.data.token
   check(cookAccount.status === 201, 'Compte cuisinier de test cree')

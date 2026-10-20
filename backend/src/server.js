@@ -141,7 +141,38 @@ app.use(
 
 app.use(express.json({ limit: '1mb' }));
 
-app.get('/health', (req, res) => res.json({ status: 'ok', time: new Date() }));
+/**
+ * Controle de sante.
+ *
+ * Il interroge reellement la base. Repondre « ok » parce que le processus
+ * Node est vivant serait pire que ne rien repondre : une supervision
+ * branchee la-dessus resterait au vert pendant que la caisse refuse
+ * chaque encaissement, et le gerant l'apprendrait par un client furieux.
+ *
+ * Toujours 200 quand le processus repond, avec l'etat de la base dans le
+ * corps : un redemarrage automatique n'arrangerait pas une base tombee,
+ * et couperait le service pour rien. La surveillance lit `database`.
+ */
+app.get('/health', async (req, res) => {
+  const depuis = Date.now();
+  let database = 'ok';
+  let detail;
+  try {
+    await sequelize.query('SELECT 1');
+  } catch (err) {
+    database = 'injoignable';
+    detail = err.message;
+  }
+  res.json({
+    status: database === 'ok' ? 'ok' : 'degrade',
+    database,
+    ...(detail ? { detail } : {}),
+    latenceMs: Date.now() - depuis,
+    version: process.env.npm_package_version || null,
+    demarreDepuisS: Math.round(process.uptime()),
+    time: new Date(),
+  });
+});
 
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);

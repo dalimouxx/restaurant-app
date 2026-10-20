@@ -16,3 +16,9 @@ npm-debug.log*
 
 coverage/
 .cache/
+
+# Sauvegardes locales : elles contiennent les ventes et les clients.
+sauvegardes/
+
+# Copies de configuration mises de cote par l installateur : secrets.
+backend/.env.avant-*
