@@ -74,6 +74,53 @@ async function run() {
   check(bidon.data.isAdmin === undefined, 'Une cle inventee est ignoree')
   check(bidon.data.nimporteQuoi === undefined, 'Aucune cle parasite enregistree')
 
+  /* ───────── Fond de carte ─────────
+     Le livreur voyait un carre gris : le serveur public d'OpenStreetMap
+     bloque les applications trop gourmandes. L'adresse des tuiles doit
+     donc etre changeable sans redeploiement. */
+  console.log('\n— Fond de carte —')
+
+  const defaut = await req('GET', '/settings')
+  check(
+    typeof defaut.data.mapTileUrl === 'string' && defaut.data.mapTileUrl.includes('{z}'),
+    'Un fond de carte est servi par defaut, avec ses reperes de tuile'
+  )
+  check(
+    !defaut.data.mapTileUrl.includes('{s}'),
+    'Sans sous-domaine {s} : cette forme est abandonnee et renvoie des tuiles barrees'
+  )
+  check(
+    typeof defaut.data.mapAttribution === 'string' && defaut.data.mapAttribution.length > 0,
+    'La mention obligatoire accompagne le fond'
+  )
+
+  const propre = await req('PUT', '/settings', {
+    mapTileUrl: 'https://tuiles.exemple.tn/{z}/{x}/{y}.png?key=abc123',
+    mapAttribution: '© Exemple',
+  }, managerToken)
+  check(
+    propre.data.mapTileUrl.includes('key=abc123'),
+    'Le gerant branche son propre fournisseur, cle comprise'
+  )
+  check(propre.data.mapAttribution === '© Exemple', 'Et la mention qui va avec')
+
+  const releve = await req('GET', '/settings')
+  check(
+    releve.data.mapTileUrl.includes('tuiles.exemple.tn'),
+    'Les livreurs le lisent sans authentification : la carte s\'affiche des l\'ouverture'
+  )
+
+  const parLeCaissier = await req('PUT', '/settings', {
+    mapTileUrl: 'https://pirate.example/{z}/{x}/{y}.png',
+  }, cashierToken)
+  check(parLeCaissier.status === 403, 'Un caissier ne detourne pas le fond de carte')
+
+  // On remet le defaut pour ne pas laisser une adresse morte derriere nous.
+  await req('PUT', '/settings', {
+    mapTileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    mapAttribution: '© OpenStreetMap',
+  }, managerToken)
+
   console.log(`\n===== ${pass} reussis, ${fail} echecs =====\n`)
   process.exit(fail > 0 ? 1 : 0)
 }

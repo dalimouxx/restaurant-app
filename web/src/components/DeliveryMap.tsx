@@ -1,12 +1,49 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { settingsApi } from '../lib/api'
 
 /**
- * Carte de suivi, sur fond OpenStreetMap : aucune clé API ni facturation,
- * contrairement à Google Maps. Leaflet est piloté directement plutôt que
- * via react-leaflet, pour recentrer sans recréer la carte à chaque position.
+ * Carte de suivi de livraison.
+ *
+ * Leaflet est piloté directement plutôt que via react-leaflet : on
+ * recentre à chaque position reçue, et recréer la carte à chaque fois
+ * ferait clignoter le fond.
+ *
+ * Le fond de carte vient des réglages, pas d'une constante ici. Le
+ * serveur public d'OpenStreetMap est tenu par des bénévoles et sa
+ * politique d'usage le réserve à un trafic modeste : passé ce seuil il
+ * répond des tuiles « Access blocked » — des images parfaitement
+ * valides, donc aucune erreur réseau à intercepter, juste une carte
+ * illisible. Une installation en service renseigne l'adresse de son
+ * propre fournisseur dans Réglages.
+ *
+ * Et quoi qu'il arrive au fond, les deux repères et la ligne restent
+ * tracés : même sur un carré gris, le livreur voit la direction et la
+ * distance, et le bouton d'itinéraire de son écran reste utilisable.
  */
+
+/** Une seule requête de réglages pour toute la session, quel que soit l'écran. */
+let fond: Promise<{ url: string; attribution: string }> | null = null
+
+const FOND_PAR_DEFAUT = {
+  url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution: '© OpenStreetMap',
+}
+
+function fondDeCarte() {
+  if (!fond) {
+    fond = settingsApi
+      .get()
+      .then((s) => ({
+        url: s.mapTileUrl?.trim() || FOND_PAR_DEFAUT.url,
+        attribution: s.mapAttribution?.trim() || FOND_PAR_DEFAUT.attribution,
+      }))
+      .catch(() => FOND_PAR_DEFAUT)
+  }
+  return fond
+}
+
 export function DeliveryMap({
   driver,
   destination,
@@ -21,6 +58,7 @@ export function DeliveryMap({
   const driverRef = useRef<L.Marker | null>(null)
   const destRef = useRef<L.Marker | null>(null)
   const lineRef = useRef<L.Polyline | null>(null)
+  const [panne, setPanne] = useState(false)
 
   useEffect(() => {
     if (!hostRef.current || mapRef.current) return
@@ -31,15 +69,22 @@ export function DeliveryMap({
       attributionControl: true,
     }).setView([center.lat, center.lng], 14)
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap',
-      maxZoom: 19,
-    }).addTo(map)
-
     L.control.zoom({ position: 'bottomright' }).addTo(map)
     mapRef.current = map
 
+    let vivant = true
+    fondDeCarte().then(({ url, attribution }) => {
+      if (!vivant || !mapRef.current) return
+      const couche = L.tileLayer(url, { attribution, maxZoom: 19 })
+      // Un fournisseur qui refuse la clé répond 403 : on le dit, plutôt
+      // que de laisser un carré vide sans explication.
+      couche.on('tileerror', () => setPanne(true))
+      couche.on('tileload', () => setPanne(false))
+      couche.addTo(mapRef.current)
+    })
+
     return () => {
+      vivant = false
       map.remove()
       mapRef.current = null
       driverRef.current = null
@@ -93,7 +138,17 @@ export function DeliveryMap({
     }
   }, [driver, destination])
 
-  return <div ref={hostRef} className={className} />
+  return (
+    <div className={`relative ${className}`}>
+      <div ref={hostRef} className="h-full w-full" />
+      {panne && (
+        <div className="pointer-events-none absolute inset-x-2 top-2 z-[500] rounded-[9px] bg-ink-900/90 px-3 py-2 text-[12px] font-semibold leading-snug text-white">
+          Fond de carte indisponible. Les repères restent justes — utilisez
+          l'itinéraire.
+        </div>
+      )}
+    </div>
+  )
 }
 
 function pinIcon(color: string, kind: 'bike' | 'home') {

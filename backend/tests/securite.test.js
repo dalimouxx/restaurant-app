@@ -118,9 +118,18 @@ async function run() {
     (h('content-security-policy') || '').includes("script-src 'self'"),
     'Seuls les scripts de ce serveur peuvent s\'executer'
   )
+  // Le fond de carte est un reglage : chaque installation branche le
+  // fournisseur qu'elle paie, dont l'adresse ne peut pas etre figee ici.
+  // Les images restent limitees a HTTPS — elles ne peuvent ni lire la
+  // session ni executer de code — pendant que le reste de la politique,
+  // scripts en tete, ne s'ouvre pas d'un pouce.
   check(
-    (h('content-security-policy') || '').includes('tile.openstreetmap.org'),
-    'La carte de livraison reste autorisee'
+    /img-src[^;]*\bhttps:/.test(h('content-security-policy') || ''),
+    'Le fond de carte configure par le client est autorise, en HTTPS'
+  )
+  check(
+    !/(script|object|frame)-src[^;]*\bhttps:(?!\/)/.test(h('content-security-policy') || ''),
+    'Cette ouverture ne concerne que les images, pas le code execute'
   )
   check(!h('x-powered-by'), 'Le serveur n\'annonce pas la technologie qu\'il utilise')
 

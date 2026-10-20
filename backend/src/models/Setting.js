@@ -26,6 +26,19 @@ const DEFAULTS = {
   taxId: '',
   ticketFooter: 'Merci de votre visite',
   currency: 'DT',
+
+  // Fond de carte du suivi de livraison.
+  //
+  // Le serveur public d'OpenStreetMap est tenu par des benevoles : sa
+  // politique d'usage le reserve a un trafic modeste et il renvoie des
+  // tuiles « Access blocked » des qu'une application en demande trop.
+  // Il convient pour essayer le logiciel ; une installation qui tourne
+  // vraiment doit renseigner ici l'adresse de son propre fournisseur,
+  // cle comprise, sans quoi les livreurs se retrouvent devant un carre
+  // gris. C'est pour cela que l'adresse est un reglage et non une
+  // constante dans le code : le gerant la change sans redeploiement.
+  mapTileUrl: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+  mapAttribution: '© OpenStreetMap',
 };
 
 /** Les horaires sont un objet, pas une ligne de texte : ils ont leur place a part. */

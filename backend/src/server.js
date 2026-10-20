@@ -113,7 +113,14 @@ app.use(
         // une caisse ne devrait pas dependre d'un service tiers pour
         // s'afficher, ni faire connaitre chaque client a un tiers.
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-        imgSrc: ["'self'", 'data:', 'blob:', 'https://*.tile.openstreetmap.org'],
+        // Le fond de carte est un reglage : chaque installation branche le
+        // fournisseur de tuiles qu'elle paie. On ne peut donc pas en figer
+        // l'adresse ici, sinon les tuiles seraient bloquees sans un mot
+        // d'explication dans la console — une panne tres difficile a
+        // diagnostiquer pour celui qui installe. Les images restent
+        // limitees a HTTPS, et tout le reste du CSP est inchange : une
+        // image ne peut ni lire la session ni executer de code.
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
         connectSrc: ["'self'", 'ws:', 'wss:'],
         fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com'],
         objectSrc: ["'none'"],

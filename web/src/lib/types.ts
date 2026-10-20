@@ -289,6 +289,9 @@ export interface Settings {
   taxId: string
   ticketFooter: string
   currency: string
+  /** Fond de carte du suivi : adresse des tuiles du fournisseur, clé comprise. */
+  mapTileUrl: string
+  mapAttribution: string
   openingHours: Record<WeekDay, DayHours>
   opening: OpeningState
 }
