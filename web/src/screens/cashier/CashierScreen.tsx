@@ -23,6 +23,7 @@ import {
   timeShort,
 } from '../../lib/format'
 import type { CashSession, Order, PaymentMethod } from '../../lib/types'
+import { useReglages } from '../../lib/reglages'
 import {
   Button,
   Card,
@@ -47,6 +48,7 @@ const QUICK_CASH = [5, 10, 20, 50]
 
 export default function CashierScreen() {
   const [session, setSession] = useState<CashSession | null>(null)
+  const { caisseSimplifiee: simplifiee } = useReglages()
   const [checking, setChecking] = useState(true)
 
   const refreshSession = useCallback(async () => {
@@ -70,6 +72,19 @@ export default function CashierScreen() {
         <Skeleton className="h-64" />
       </div>
     )
+  }
+
+  /**
+   * Caisse simplifiee : pas de session a ouvrir.
+   *
+   * Les soirs sans caissier, le gerant encaisse lui-meme entre deux
+   * clients. Lui imposer d'ouvrir une session, d'annoncer son fond puis
+   * de la cloturer, c'est trois gestes administratifs pour trois
+   * sandwichs — et en pratique personne ne cloture, si bien que l'ecart
+   * de caisse du lendemain ne veut plus rien dire.
+   */
+  if (simplifiee) {
+    return <Register session={null} onSessionChange={refreshSession} />
   }
 
   if (!session?.isOpen) {
@@ -151,7 +166,7 @@ function Register({
   session,
   onSessionChange,
 }: {
-  session: CashSession
+  session: CashSession | null
   onSessionChange: () => void
 }) {
   const [queue, setQueue] = useState<Order[]>([])
@@ -305,7 +320,14 @@ function Register({
   }
 
   return (
-    <div className="grid min-h-[calc(100dvh-4rem)] grid-cols-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+    /* La hauteur est bornée sur grand écran, et pas seulement minimale :
+       avec « min-h », la colonne grandit avec la file, le défilement
+       interne ne s'enclenche jamais et c'est la page entière qui
+       descend. Un midi à quarante commandes en attente, le pavé
+       d'encaissement sortait de l'écran — exactement au moment où le
+       caissier en a besoin. Sur téléphone la disposition est en une
+       seule colonne : là, elle doit pouvoir s'allonger. */
+    <div className="grid min-h-[calc(100dvh-4rem)] grid-cols-1 lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
       {/* File */}
       <section className="flex min-h-0 flex-col border-ink-200 lg:border-r">
         <div className="flex items-center justify-between gap-3 border-b border-ink-200 px-5 py-2.5">
@@ -330,13 +352,15 @@ function Register({
               Aujourd'hui
             </TabButton>
           </div>
-          <button
-            onClick={() => setClosing(true)}
-            className="flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-[12.5px] font-semibold text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900"
-          >
-            <LockKeyhole size={13} />
-            Clôturer
-          </button>
+          {session && (
+            <button
+              onClick={() => setClosing(true)}
+              className="flex items-center gap-1.5 rounded-[7px] px-2 py-1 text-[12.5px] font-semibold text-ink-500 transition-colors hover:bg-ink-100 hover:text-ink-900"
+            >
+              <LockKeyhole size={13} />
+              Clôturer
+            </button>
+          )}
         </div>
 
         {tab === 'queue' && (
@@ -446,12 +470,14 @@ function Register({
             Imprimer le reçu à l'encaissement
           </button>
 
-          <div className="flex items-center justify-between text-[13px]">
-            <span className="text-ink-500">Fond de caisse</span>
-            <span className="num font-semibold text-ink-900">
-              {moneyDT(session.openingFloat)}
-            </span>
-          </div>
+          {session && (
+            <div className="flex items-center justify-between text-[13px]">
+              <span className="text-ink-500">Fond de caisse</span>
+              <span className="num font-semibold text-ink-900">
+                {moneyDT(session.openingFloat)}
+              </span>
+            </div>
+          )}
         </div>
       </section>
 
@@ -461,6 +487,7 @@ function Register({
           <PaymentPanel
             key={selected.id}
             order={selected}
+            unSeulGeste={session === null}
             onPay={pay}
             onPrint={() =>
               print({ order: selected, kind: 'receipt', cashierName: user?.fullName })
@@ -493,6 +520,7 @@ function Register({
         }}
       />
 
+      {session && (
       <CloseSession
         open={closing}
         session={session}
@@ -502,6 +530,7 @@ function Register({
           onSessionChange()
         }}
       />
+      )}
     </div>
   )
 }
@@ -531,6 +560,7 @@ function TabButton({
 
 function PaymentPanel({
   order,
+  unSeulGeste,
   onPay,
   onPrint,
   onDiscount,
@@ -538,6 +568,8 @@ function PaymentPanel({
   onSplit,
 }: {
   order: Order
+  /** Caisse simplifiée : un seul bouton, aucun moyen de paiement à choisir. */
+  unSeulGeste: boolean
   onPay: (method: PaymentMethod) => void
   onPrint: () => void
   onDiscount: () => void
@@ -780,14 +812,25 @@ function PaymentPanel({
             </button>
           </div>
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <Button size="lg" icon={Banknote} onClick={() => onPay('cash')}>
-              Espèces
-            </Button>
-            <Button size="lg" variant="secondary" icon={CreditCard} onClick={() => onPay('card')}>
-              Carte
-            </Button>
-          </div>
+          {/* En caisse simplifiee, il n'y a rien a choisir : un appui
+              encaisse en especes, c'est tout. Le gerant qui sert aussi
+              au comptoir n'a pas une main de libre pour lire un menu. */}
+          {unSeulGeste ? (
+            <div className="mt-3">
+              <Button size="xl" icon={Banknote} className="w-full" onClick={() => onPay('cash')}>
+                Encaisser {moneyDT(order.totalAmount)}
+              </Button>
+            </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Button size="lg" icon={Banknote} onClick={() => onPay('cash')}>
+                Espèces
+              </Button>
+              <Button size="lg" variant="secondary" icon={CreditCard} onClick={() => onPay('card')}>
+                Carte
+              </Button>
+            </div>
+          )}
           <div className="mt-2 flex items-center justify-between gap-3">
             <p className="text-[11.5px] text-ink-400">
               Entrée encaisse en espèces · Échap efface
