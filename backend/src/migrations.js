@@ -93,6 +93,9 @@ const STATEMENTS = [
   `ALTER TABLE products
      ADD COLUMN IF NOT EXISTS "prepMinutes" INTEGER NOT NULL DEFAULT 0`,
 
+  `ALTER TABLE order_items
+     ADD COLUMN IF NOT EXISTS "prepMinutes" INTEGER NOT NULL DEFAULT 0`,
+
   // Remise au stock apres annulation. Un type a part, et non un simple
   // ajustement : le calcul du benefice net doit pouvoir deduire ce qui n'a
   // finalement pas ete consomme, sans confondre avec une correction a la main.

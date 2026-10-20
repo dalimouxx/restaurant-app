@@ -404,6 +404,7 @@ function ProductEditor({
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [photo, setPhoto] = useState<string | null>(null)
+  const [prepMinutes, setPrepMinutes] = useState('')
   const [options, setOptions] = useState<DraftOption[]>([])
   const [recipe, setRecipe] = useState<RecipeLine[]>([])
   const [busy, setBusy] = useState(false)
@@ -418,6 +419,7 @@ function ProductEditor({
     setDescription(product?.description ?? '')
     setCategoryId(product?.categoryId ?? categories[0]?.id ?? '')
     setPhoto(product?.imageUrl ?? null)
+    setPrepMinutes(product?.prepMinutes ? String(product.prepMinutes) : '')
     const drafts = (product?.options ?? []).map(toDraft)
     setOptions(drafts)
     original.current = drafts
@@ -447,6 +449,7 @@ function ProductEditor({
       categoryId,
       description: description.trim() || null,
       imageUrl: photo,
+      prepMinutes: Number(prepMinutes) || 0,
       recipe: recipe.filter((r) => r.ingredientId && r.quantityNeeded > 0),
     }
 
@@ -611,6 +614,18 @@ function ProductEditor({
                 </Select>
               </Field>
             </div>
+            <Field
+              label="Temps de préparation"
+              hint="En minutes. Donne son minuteur à la cuisine ; 0 = pas de minuteur"
+            >
+              <Input
+                inputMode="numeric"
+                value={prepMinutes}
+                onChange={(e) => setPrepMinutes(e.target.value)}
+                placeholder="0"
+                className="num w-24"
+              />
+            </Field>
             <Field label="Description" hint="Affichée sur la borne et le site">
               <Input
                 value={description}

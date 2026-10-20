@@ -205,6 +205,8 @@ export const auth = {
 export interface ProductInput {
   name: string
   price: number
+  /** Temps de préparation annoncé, en minutes. */
+  prepMinutes?: number
   categoryId: string
   description?: string | null
   /** Data URL réduite par le navigateur, ou null pour retirer la photo. */
@@ -360,7 +362,7 @@ export const orders = {
     request<Order>(`/orders/${id}/pay`, { method: 'POST', body: { paymentMethod } }),
 
   kitchenQueue: () => request<Order[]>('/orders/kitchen/queue'),
-  setKitchenStatus: (id: string, status: 'preparing' | 'ready') =>
+  setKitchenStatus: (id: string, status: 'in_kitchen' | 'preparing' | 'ready') =>
     request<Order>(`/orders/${id}/kitchen-status`, { method: 'POST', body: { status } }),
 
   byId: (id: string) => request<Order>(`/orders/${id}`),

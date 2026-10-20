@@ -70,6 +70,8 @@ export interface Product {
   categoryId: string
   Category?: Category
   options?: ProductOption[]
+  /** Temps de préparation annoncé, en minutes. */
+  prepMinutes?: number
   /** Fournie seulement par la vue du gérant. */
   recipe?: RecipeLine[]
 }
@@ -96,6 +98,8 @@ export interface OrderItem {
   orderId: string
   productId: string
   productNameSnapshot: string
+  /** Figé à la commande : la recette peut changer, le ticket non. */
+  prepMinutes?: number
   /** Prix du plat, suppléments compris. */
   unitPrice: number
   quantity: number

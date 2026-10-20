@@ -242,6 +242,7 @@ router.post('/', requireAuth, requireRole(...MANAGER), async (req, res) => {
       price: cleanPrice(req.body.price),
       description: description ? String(description).slice(0, 500) : null,
       imageUrl: normalizeImage(imageUrl) ?? null,
+      prepMinutes: Math.max(0, Math.min(180, Number(req.body.prepMinutes) || 0)),
       categoryId,
       displayOrder: Number.isFinite(last) ? last + 1 : 0,
     });
@@ -283,6 +284,9 @@ router.put('/:id', requireAuth, requireRole(...MANAGER), async (req, res) => {
     }
     if (req.body.imageUrl !== undefined) patch.imageUrl = normalizeImage(req.body.imageUrl);
     if (req.body.isAvailable !== undefined) patch.isAvailable = !!req.body.isAvailable;
+    if (req.body.prepMinutes !== undefined) {
+      patch.prepMinutes = Math.max(0, Math.min(180, Number(req.body.prepMinutes) || 0));
+    }
     if (req.body.categoryId !== undefined) {
       const category = await Category.findByPk(req.body.categoryId);
       if (!category) return res.status(400).json({ error: 'Categorie inconnue.' });

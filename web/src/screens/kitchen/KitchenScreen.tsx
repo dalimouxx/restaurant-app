@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Ban,
   Bike,
@@ -8,6 +8,7 @@ import {
   Printer,
   Smartphone,
   Store,
+  Undo2,
 } from 'lucide-react'
 import { orders } from '../../lib/api'
 import { joinRoom, on } from '../../lib/socket'
@@ -28,11 +29,46 @@ export default function KitchenScreen() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const { notify } = useToast()
   const { print } = usePrint()
-  const now = useNow(10000)
+  const now = useNow(5000)
+
+  /** Impression du bon à l'arrivée, mémorisée sur ce poste. */
+  const [autoPrint, setAutoPrint] = useState(() => {
+    try {
+      return localStorage.getItem('service.kitchenPrint') === 'on'
+    } catch {
+      return false
+    }
+  })
+  const dejaImprimes = useRef<Set<string>>(new Set())
+  const premierCycle = useRef(true)
+  // Lu dans `load`, qui ne doit pas se recréer à chaque bascule.
+  const autoPrintRef = useRef(autoPrint)
+  useEffect(() => {
+    autoPrintRef.current = autoPrint
+  }, [autoPrint])
 
   const load = useCallback(async () => {
     try {
-      setQueue(await orders.kitchenQueue())
+      const liste = await orders.kitchenQueue()
+
+      /**
+       * Si la cuisine travaille sur papier, le bon doit sortir tout seul
+       * à l'arrivée du ticket. Chaque commande n'est imprimée qu'une fois,
+       * même si l'écran se recharge toutes les cinq secondes.
+       */
+      if (autoPrintRef.current) {
+        for (const o of liste) {
+          if (dejaImprimes.current.has(o.id)) continue
+          dejaImprimes.current.add(o.id)
+          if (premierCycle.current) continue // pas de rafale au démarrage
+          print({ order: o, kind: 'kitchen' })
+        }
+      } else {
+        for (const o of liste) dejaImprimes.current.add(o.id)
+      }
+      premierCycle.current = false
+
+      setQueue(liste)
     } catch {
       /* reconnexion gérée par le socket et le cycle suivant */
     } finally {
@@ -57,6 +93,22 @@ export default function KitchenScreen() {
     }
   }, [load, notify])
 
+  /** Rappelle un ticket marqué prêt par erreur. */
+  async function rappeler(order: Order) {
+    setBusyId(order.id)
+    setQueue((q) => q.map((o) => (o.id === order.id ? { ...o, status: 'preparing' } : o)))
+    try {
+      await orders.setKitchenStatus(order.id, 'preparing')
+      notify(`${orderNo(order.orderNumber)} rappelée en préparation.`, 'info')
+      load()
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Rappel refusé.', 'error')
+      load()
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function advance(order: Order) {
     const next = order.status === 'in_kitchen' ? 'preparing' : 'ready'
     setBusyId(order.id)
@@ -76,6 +128,30 @@ export default function KitchenScreen() {
   const active = queue.filter((o) => o.status !== 'ready')
   const ready = queue.filter((o) => o.status === 'ready')
 
+  /**
+   * Ce qu'il y a à préparer, tous tickets confondus.
+   *
+   * Quatre tickets qui demandent le même sandwich, ce sont quatre
+   * sandwichs à faire d'un coup, pas quatre fois un sandwich. Les plats
+   * modifiés restent à part : « sans harissa » ne se cuisine pas avec les
+   * autres.
+   */
+  const aPreparer = useMemo(() => {
+    const total = new Map<string, { nom: string; quantite: number; modifie: boolean }>()
+    for (const o of active) {
+      for (const it of o.items ?? []) {
+        const modifie =
+          (it.customization?.removed?.length ?? 0) > 0 ||
+          (it.customization?.added?.length ?? 0) > 0
+        const cle = `${it.productNameSnapshot}|${modifie ? 'mod' : 'std'}`
+        const deja = total.get(cle)
+        if (deja) deja.quantite += it.quantity
+        else total.set(cle, { nom: it.productNameSnapshot, quantite: it.quantity, modifie })
+      }
+    }
+    return [...total.values()].sort((a, b) => b.quantite - a.quantite)
+  }, [active])
+
   return (
     <div className="dark-surface flex min-h-dvh flex-col bg-ink-900">
       <header className="sticky top-0 z-20 flex items-center justify-between gap-4 border-b border-ink-800 bg-ink-900/90 px-5 py-3.5 backdrop-blur-md sm:px-7">
@@ -86,6 +162,32 @@ export default function KitchenScreen() {
           </span>
         </div>
         <div className="flex items-center gap-4">
+          <button
+            onClick={() =>
+              setAutoPrint((v) => {
+                const next = !v
+                try {
+                  localStorage.setItem('service.kitchenPrint', next ? 'on' : 'off')
+                } catch {
+                  /* mode privé */
+                }
+                return next
+              })
+            }
+            title={
+              autoPrint
+                ? 'Le bon sort automatiquement à chaque ticket'
+                : "Imprimer automatiquement chaque bon à l'arrivée"
+            }
+            className={`flex h-9 items-center gap-1.5 rounded-[8px] px-2.5 text-[12.5px] font-bold transition-colors ${
+              autoPrint
+                ? 'bg-petrol-600 text-white'
+                : 'text-ink-500 hover:bg-ink-800 hover:text-white'
+            }`}
+          >
+            <Printer size={14} />
+            <span className="hidden sm:inline">Impression auto</span>
+          </button>
           <ConnectionDot dark />
           <div className="flex items-baseline gap-1.5">
             <span className="num text-[22px] font-bold text-white">{active.length}</span>
@@ -117,6 +219,30 @@ export default function KitchenScreen() {
             description="Les commandes payées arrivent ici automatiquement."
           />
         ) : (
+          <>
+            {aPreparer.length > 0 && (
+              <section className="mb-5 rounded-[13px] border border-ink-800 bg-ink-800/40 p-4">
+                <h2 className="mb-3 text-[13px] font-bold tracking-[0.06em] text-ink-500 uppercase">
+                  À préparer, tous tickets confondus
+                </h2>
+                <div className="flex flex-wrap gap-x-7 gap-y-2.5">
+                  {aPreparer.map((p) => (
+                    <div key={`${p.nom}-${p.modifie}`} className="flex items-baseline gap-2">
+                      <span className="num text-[26px] leading-none font-bold text-white">
+                        {p.quantite}
+                      </span>
+                      <span className="text-[15px] font-semibold text-ink-300">{p.nom}</span>
+                      {p.modifie && (
+                        <span className="rounded-full bg-saffron-500/20 px-2 py-0.5 text-[11px] font-bold text-saffron-500">
+                          modifié
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
           <div className="grid grid-cols-[repeat(auto-fill,minmax(270px,1fr))] gap-4">
             {[...active, ...ready].map((order) => (
               <Ticket
@@ -126,9 +252,11 @@ export default function KitchenScreen() {
                 busy={busyId === order.id}
                 onAdvance={() => advance(order)}
                 onPrint={() => print({ order, kind: 'kitchen' })}
+                onRecall={() => rappeler(order)}
               />
             ))}
           </div>
+          </>
         )}
       </main>
     </div>
@@ -141,14 +269,26 @@ function Ticket({
   busy,
   onAdvance,
   onPrint,
+  onRecall,
 }: {
   order: Order
   now: number
   busy: boolean
   onAdvance: () => void
   onPrint: () => void
+  onRecall: () => void
 }) {
   const mins = elapsedMinutes(order.createdAt, now)
+
+  /**
+   * Minuteur du ticket.
+   *
+   * Le temps annoncé est celui du plat le plus long : une commande est
+   * prête quand tout l'est. Un plat sans temps renseigné ne compte pas,
+   * plutôt que de mentir avec une valeur par défaut.
+   */
+  const annonce = Math.max(0, ...(order.items ?? []).map((it) => it.prepMinutes ?? 0))
+  const reste = annonce > 0 ? annonce - mins : null
   const isReady = order.status === 'ready'
   const late = !isReady && mins >= LATE_AT
   const warn = !isReady && !late && mins >= WARN_AT
@@ -188,8 +328,32 @@ function Ticket({
             <channel.icon size={14} strokeWidth={2.3} />
             <span className="text-[12px] font-bold">{channel.label}</span>
           </div>
+          {reste !== null && !isReady && (
+            <p
+              className={`num mt-1 text-[12px] font-bold ${
+                reste < 0 ? 'text-coral-500' : reste <= 2 ? 'text-saffron-500' : 'text-ink-500'
+              }`}
+            >
+              {reste < 0
+                ? `${Math.abs(reste)} min de retard`
+                : reste === 0
+                  ? 'à sortir'
+                  : `${reste} min restantes`}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
+          {isReady && (
+            <button
+              onClick={onRecall}
+              disabled={busy}
+              aria-label="Rappeler en préparation"
+              title="Marquée prête par erreur ?"
+              className="grid size-7 place-items-center rounded-[7px] text-ink-500 transition-colors hover:bg-ink-700 hover:text-saffron-500 disabled:opacity-40"
+            >
+              <Undo2 size={14} />
+            </button>
+          )}
           <button
             onClick={onPrint}
             aria-label="Imprimer le bon"

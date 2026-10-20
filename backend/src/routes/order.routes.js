@@ -215,6 +215,7 @@ async function createOrderWithItems(opts) {
     enrichedItems.push({
       productId: product.id,
       productNameSnapshot: product.name,
+      prepMinutes: product.prepMinutes || 0,
       unitPrice,
       quantity: item.quantity,
       customization,
@@ -364,18 +365,26 @@ router.post('/:id/pay', requireAuth, requireRole('cashier', 'manager', 'admin', 
  * entière, et souvent photographié.
  */
 router.get('/board', async (req, res) => {
+  /**
+   * Les plus recentes d'abord pour la troncature, puis remises dans
+   * l'ordre d'arrivee pour l'affichage. Trier a l'endroit et couper a 40
+   * revenait a jeter les commandes du moment pour garder celles du matin,
+   * c'est-a-dire exactement l'inverse de ce que le client cherche.
+   */
   const orders = await Order.findAll({
     where: { status: ['in_kitchen', 'preparing', 'ready'], orderDate: businessDay() },
     attributes: ['orderNumber', 'status', 'updatedAt'],
-    order: [['updatedAt', 'ASC']],
+    order: [['updatedAt', 'DESC']],
     limit: 40,
   });
   res.json(
-    orders.map((o) => ({
-      orderNumber: o.orderNumber,
-      status: o.status,
-      since: o.updatedAt,
-    }))
+    orders
+      .map((o) => ({
+        orderNumber: o.orderNumber,
+        status: o.status,
+        since: o.updatedAt,
+      }))
+      .reverse()
   );
 });
 
@@ -685,12 +694,44 @@ router.get('/kitchen/queue', requireAuth, requireRole('cook', 'manager', 'admin'
 
 // --- Cuisine : changer le statut d'une commande (preparing -> ready) ---
 router.post('/:id/kitchen-status', requireAuth, requireRole('cook', 'manager', 'admin', 'super_admin'), async (req, res) => {
-  const { status } = req.body; // 'preparing' | 'ready'
+  const { status } = req.body; // 'in_kitchen' | 'preparing' | 'ready'
+  if (!['in_kitchen', 'preparing', 'ready'].includes(status)) {
+    throw badRequest('Statut de cuisine invalide.');
+  }
+
   const order = await Order.findByPk(req.params.id);
   if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
 
+  /**
+   * Rappel d'un plat marque pret par erreur.
+   *
+   * C'est le geste le plus courant en coup de feu : on tape sur le
+   * mauvais ticket. Tant que personne n'a emporte la commande, le retour
+   * en arriere doit etre possible ; une fois le livreur parti, non.
+   */
+  const enArriere = ['ready', 'awaiting_driver'].includes(order.status) && status !== 'ready';
+  if (enArriere && order.driverId) {
+    throw badRequest('Un livreur a deja pris cette commande.');
+  }
+  if (['out_for_delivery', 'delivered', 'completed', 'cancelled'].includes(order.status)) {
+    throw badRequest('Cette commande a quitte la cuisine.');
+  }
+
   order.status = status;
   await order.save();
+
+  // Un rappel retire la course de la liste des livreurs.
+  if (enArriere) {
+    await order.save();
+    socket.emitDeliveryTaken(order.id, null);
+    await audit.record(req, {
+      action: 'order.kitchen_undo',
+      entityType: 'order',
+      entityId: order.id,
+      summary: `Commande n° ${order.orderNumber} rappelée en préparation`,
+      details: { orderNumber: order.orderNumber },
+    });
+  }
 
   // Si la commande est prete ET c'est une livraison -> on la propose aux livreurs
   if (status === 'ready' && order.fulfillmentType === 'delivery') {
