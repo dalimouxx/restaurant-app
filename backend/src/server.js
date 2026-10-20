@@ -142,6 +142,42 @@ app.use(
 app.use(express.json({ limit: '1mb' }));
 
 /**
+ * Version de cette installation, relevee une fois au demarrage.
+ *
+ * `npm_package_version` ne vaut rien ici : cette variable n'existe que
+ * si le serveur est lance par npm, alors qu'une installation en service
+ * est demarree par systemd avec `node src/server.js`. Toutes les
+ * installations reelles auraient donc annonce une version vide — juste
+ * la ou savoir qui tourne sur quoi est le plus utile.
+ *
+ * La revision git accompagne le numero : entre deux clients installes a
+ * un mois d'intervalle, c'est elle qui dit lequel a le correctif.
+ */
+const VERSION = (() => {
+  try {
+    return require('../package.json').version || null;
+  } catch {
+    return null;
+  }
+})();
+
+const REVISION = (() => {
+  try {
+    return require('child_process')
+      .execSync('git rev-parse --short HEAD', {
+        cwd: __dirname,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 2000,
+      })
+      .toString()
+      .trim() || null;
+  } catch {
+    // Installation sans git, ou dossier deplace : ce n'est pas une panne.
+    return null;
+  }
+})();
+
+/**
  * Controle de sante.
  *
  * Il interroge reellement la base. Repondre « ok » parce que le processus
@@ -168,7 +204,8 @@ app.get('/health', async (req, res) => {
     database,
     ...(detail ? { detail } : {}),
     latenceMs: Date.now() - depuis,
-    version: process.env.npm_package_version || null,
+    version: VERSION,
+    revision: REVISION,
     demarreDepuisS: Math.round(process.uptime()),
     time: new Date(),
   });
