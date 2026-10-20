@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Map, Printer, Store } from 'lucide-react'
+import { Printer, Store } from 'lucide-react'
 import { settingsApi } from '../../lib/api'
 import type { Settings } from '../../lib/types'
 import {
@@ -13,6 +13,7 @@ import {
 } from '../../components/ui'
 import { OpeningHoursCard } from './OpeningHoursCard'
 import { DeliveryZonesCard } from './DeliveryZonesCard'
+import { MapTilesCard } from './MapTilesCard'
 
 /**
  * Informations de l'établissement. Elles figurent en tête de chaque reçu,
@@ -154,53 +155,13 @@ export default function SettingsPage() {
 
       <DeliveryZonesCard />
 
-      {/* Fond de carte du suivi de livraison.
-          Réglage et non constante : le serveur public d'OpenStreetMap est
-          tenu par des bénévoles, réservé à un trafic modeste, et renvoie
-          des tuiles « Access blocked » au-delà. Chaque installation en
-          service branche ici son propre fournisseur. */}
-      <div>
-        <SectionTitle>Fond de carte</SectionTitle>
-        <Card className="space-y-3.5 p-5">
-          <Field
-            label="Adresse des tuiles"
-            hint="Les repères {z}/{x}/{y} sont remplacés par la carte. Clé d'accès comprise, s'il en faut une."
-          >
-            <Input
-              value={form.mapTileUrl}
-              onChange={(e) => set('mapTileUrl', e.target.value)}
-              placeholder="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-              className="font-mono text-[13px]"
-            />
-          </Field>
-          <Field label="Mention obligatoire" hint="Affichée en bas de la carte">
-            <Input
-              value={form.mapAttribution}
-              onChange={(e) => set('mapAttribution', e.target.value)}
-              placeholder="© OpenStreetMap"
-            />
-          </Field>
-
-          <div className="flex items-start gap-2 rounded-[11px] bg-amber-50 p-3.5 text-[12.5px] leading-snug text-ink-700">
-            <Map size={15} className="mt-px shrink-0 text-amber-600" />
-            <span>
-              Laissé par défaut, le fond vient du serveur public
-              d'OpenStreetMap : il convient pour essayer le logiciel, mais sa
-              politique d'usage le réserve à un trafic modeste et il finit par
-              renvoyer des tuiles barrées. Un restaurant qui livre tous les
-              jours prend un abonnement chez un fournisseur de cartes et colle
-              son adresse ici. Les livreurs gardent de toute façon le bouton
-              d'itinéraire, qui ne dépend pas de ce réglage.
-            </span>
-          </div>
-
-          <div className="flex justify-end pt-1">
-            <Button onClick={save} loading={busy}>
-              Enregistrer
-            </Button>
-          </div>
-        </Card>
-      </div>
+      <MapTilesCard
+        tileUrl={form.mapTileUrl}
+        attribution={form.mapAttribution}
+        busy={busy}
+        onChange={(patch) => setForm((f) => (f ? { ...f, ...patch } : f))}
+        onSave={save}
+      />
     </div>
   )
 }
