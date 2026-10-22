@@ -381,7 +381,13 @@ export const orders = {
   setKitchenStatus: (id: string, status: 'in_kitchen' | 'preparing' | 'ready') =>
     request<Order>(`/orders/${id}/kitchen-status`, { method: 'POST', body: { status } }),
 
-  byId: (id: string) => request<Order>(`/orders/${id}`),
+  /**
+   * Le jeton part s'il existe, mais son absence ne bloque pas : une
+   * commande passee sans compte doit rester suivable par celui qui en
+   * detient l'adresse. Le serveur refuse quand meme celles qui
+   * appartiennent a un compte.
+   */
+  byId: (id: string) => request<Order>(`/orders/${id}`, { auth: true }),
   forCustomer: (customerId: string) => request<Order[]>(`/orders/customer/${customerId}`),
 
   /** Commandes de la journée : réimpression d'un reçu, rattrapage d'une erreur. */

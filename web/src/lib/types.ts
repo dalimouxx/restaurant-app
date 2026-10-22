@@ -298,6 +298,13 @@ export interface Settings {
   caisseSimplifiee: 'oui' | 'non'
   openingHours: Record<WeekDay, DayHours>
   opening: OpeningState
+  /** L'établissement servi : logo, et repère pour le code à scanner. */
+  etablissement: {
+    id: string
+    name: string
+    slug: string
+    logoUrl: string | null
+  } | null
 }
 
 /** Zone de livraison : un quartier, un tarif. */

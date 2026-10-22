@@ -50,12 +50,57 @@ function sameLine(a: CartLine, product: Product, options: ProductOption[]) {
   return options.every((o) => ids.has(o.id))
 }
 
-function createCart() {
-  return create<CartState>((set, get) => ({
-    lines: [],
+/**
+ * Un panier qui survit a la fermeture du navigateur.
+ *
+ * Le cas est banal : on compose sa commande, le telephone sonne, on
+ * ferme l'onglet. En revenant, tout etait perdu — et personne ne
+ * recommence une commande de huit lignes, il va ailleurs.
+ *
+ * Seul le panier du client est retenu. Celui de la borne ne doit
+ * surtout pas l'etre : l'ecran est partage, et le client suivant
+ * trouverait le panier du precedent.
+ */
+function createCart(memoire?: string) {
+  const relire = (): CartLine[] => {
+    if (!memoire) return []
+    try {
+      const brut = localStorage.getItem(memoire)
+      const lignes = brut ? JSON.parse(brut) : null
+      // Le contenu vient du disque : il peut dater d'une version plus
+      // ancienne. On ne garde que ce qui a la forme attendue.
+      if (!Array.isArray(lignes)) return []
+      return lignes.filter(
+        (l) => l && l.product && typeof l.product.id === 'string' && l.quantity > 0,
+      )
+    } catch {
+      return []
+    }
+  }
+
+  const retenir = (lines: CartLine[]) => {
+    if (!memoire) return
+    try {
+      if (lines.length === 0) localStorage.removeItem(memoire)
+      else localStorage.setItem(memoire, JSON.stringify(lines))
+    } catch {
+      /* mode prive ou espace plein : le panier vit alors le temps de l'onglet */
+    }
+  }
+
+  return create<CartState>((set, get) => {
+    const majuscule = (fn: (s: CartState) => Partial<CartState>) =>
+      set((s) => {
+        const suite = fn(s)
+        if (suite.lines) retenir(suite.lines)
+        return suite
+      })
+
+    return {
+    lines: relire(),
 
     add: (product, options = []) =>
-      set((s) => {
+      majuscule((s) => {
         const i = s.lines.findIndex((l) => sameLine(l, product, options))
         if (i >= 0) {
           const lines = [...s.lines]
@@ -66,14 +111,14 @@ function createCart() {
       }),
 
     increment: (index) =>
-      set((s) => {
+      majuscule((s) => {
         const lines = [...s.lines]
         lines[index] = { ...lines[index], quantity: lines[index].quantity + 1 }
         return { lines }
       }),
 
     decrement: (index) =>
-      set((s) => {
+      majuscule((s) => {
         const lines = [...s.lines]
         if (lines[index].quantity > 1) {
           lines[index] = { ...lines[index], quantity: lines[index].quantity - 1 }
@@ -84,19 +129,21 @@ function createCart() {
       }),
 
     remove: (index) =>
-      set((s) => {
+      majuscule((s) => {
         const lines = [...s.lines]
         lines.splice(index, 1)
         return { lines }
       }),
 
-    clear: () => set({ lines: [] }),
+    clear: () => majuscule(() => ({ lines: [] })),
 
     subtotal: () =>
       get().lines.reduce((sum, l) => sum + lineUnitPrice(l) * l.quantity, 0),
     count: () => get().lines.reduce((sum, l) => sum + l.quantity, 0),
-  }))
+    }
+  })
 }
 
+// La borne est un ecran partage : son panier ne survit pas au client.
 export const useKioskCart = createCart()
-export const useCustomerCart = createCart()
+export const useCustomerCart = createCart('service.panier')

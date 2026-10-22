@@ -18,6 +18,7 @@ import { useAuth } from './lib/store'
 import type { Role } from './lib/types'
 import LoginScreen from './screens/LoginScreen'
 import PortalScreen from './screens/PortalScreen'
+import LandingScreen from './screens/LandingScreen'
 import KioskScreen from './screens/kiosk/KioskScreen'
 import CashierScreen from './screens/cashier/CashierScreen'
 import KitchenScreen from './screens/kitchen/KitchenScreen'
@@ -117,18 +118,30 @@ export default function App() {
       <BrowserRouter>
         <Suspense fallback={<Loading />}>
         <Routes>
-          <Route path="/" element={<PortalScreen />} />
+          {/*
+            * L'adresse racine est la vitrine du restaurant, pas un
+            * sommaire de postes de travail. Un client qui voit
+            * « Caisse » et « Gestion » sur la page d'accueil d'un
+            * fastfood comprend qu'il regarde un logiciel.
+            *
+            * Les postes gardent leurs adresses ; l'ancien sommaire vit
+            * desormais sous /espace, atteignable par le pied de page.
+            */}
+          <Route path="/" element={<LandingScreen />} />
+          <Route path="/espace" element={<PortalScreen />} />
 
           {/* Client */}
           <Route path="/commander" element={<CustomerScreen />} />
-          <Route
-            path="/commande/:id"
-            element={
-              <RequireSession>
-                <TrackingScreen />
-              </RequireSession>
-            }
-          />
+          {/*
+            * Le suivi n'exige plus de session.
+            *
+            * Une commande passee sans compte — celle de quelqu'un qui a
+            * scanne le code pose sur sa table — n'a aucun autre chemin
+            * de retour. Le serveur arbitre : il sert les commandes sans
+            * proprietaire a qui en detient l'adresse, et garde celles
+            * d'un client inscrit derriere sa session.
+            */}
+          <Route path="/commande/:id" element={<TrackingScreen />} />
           <Route
             path="/mes-commandes"
             element={

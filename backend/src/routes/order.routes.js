@@ -107,12 +107,55 @@ router.post(
   }
 );
 
+/**
+ * Authentification facultative.
+ *
+ * Un jeton valide identifie le client ; son absence ne bloque pas. Le
+ * cas vise est celui du code a scanner pose sur les tables : personne
+ * ne cree un compte assis au comptoir, et une inscription imposee a ce
+ * moment-la fait perdre la commande.
+ */
+function authFacultative(req, res, next) {
+  const entete = req.headers.authorization;
+  if (!entete || !entete.startsWith('Bearer ')) return next();
+  return requireAuth(req, res, next);
+}
+
 // --- Creation d'une commande en ligne, avec choix retrait/livraison ---
-router.post('/online', requireAuth, async (req, res) => {
+router.post(
+  '/online',
+  authFacultative,
+  // Sans compte, c'est une porte ouverte : on la limite comme celle de
+  // la borne. Trente commandes par quart d'heure et par adresse, bien
+  // au-dela du rythme d'une vraie salle.
+  throttle('commande-en-ligne', { max: 30, windowMs: 15 * 60 * 1000 }),
+  async (req, res) => {
   const {
     items, fulfillmentType, deliveryAddress, deliveryLat, deliveryLng,
     deliveryZoneId, customerName, customerPhone,
   } = req.body;
+
+  /**
+   * Sans compte, le nom et le telephone sont exiges.
+   *
+   * Le telephone n'est pas une formalite : c'est le seul moyen de
+   * joindre quelqu'un dont la commande pose probleme — un plat epuise
+   * en cours de preparation, une adresse introuvable. Une commande
+   * anonyme et injoignable ne sert personne.
+   */
+  if (!req.user) {
+    const { commandeSansCompte } = await getSettings();
+    if (commandeSansCompte !== 'oui') {
+      throw new HttpError(401, 'Connectez-vous pour commander en ligne.');
+    }
+    if (!customerName || String(customerName).trim().length < 2) {
+      throw badRequest('Indiquez votre nom.');
+    }
+    const tel = String(customerPhone || '').replace(/[^\d+]/g, '');
+    if (tel.length < 8) {
+      throw badRequest('Indiquez un numero de telephone joignable.');
+    }
+  }
 
   /**
    * Hors des heures d'ouverture, on refuse ici et pas seulement dans le
@@ -148,7 +191,9 @@ router.post('/online', requireAuth, async (req, res) => {
     source: 'online',
     fulfillmentType,
     status: 'awaiting_payment',
-    customerId: req.user.id,
+    // Sans compte, la commande n'a pas de proprietaire : seuls le nom
+    // et le telephone saisis la rattachent a quelqu'un.
+    customerId: req.user?.id ?? null,
     customerName,
     customerPhone,
     deliveryAddress,
@@ -162,7 +207,8 @@ router.post('/online', requireAuth, async (req, res) => {
   });
 
   res.status(201).json(order);
-});
+  }
+);
 
 async function createOrderWithItems(opts) {
   const {
@@ -798,9 +844,31 @@ router.post('/:id/kitchen-status', requireAuth, requireRole('cook', 'manager', '
 });
 
 // --- Suivi d'une commande par le client ---
-router.get('/:id', requireAuth, async (req, res) => {
+/**
+ * Une commande, pour qui en detient l'adresse.
+ *
+ * Avec un compte, rien ne change. Sans compte, le suivi doit pourtant
+ * rester accessible : quelqu'un qui scanne le code pose sur sa table
+ * commande sans s'inscrire, et c'est precisement lui qui a besoin de
+ * voir ou en est sa commande.
+ *
+ * L'ouverture est donc limitee aux commandes qui n'appartiennent a
+ * aucun compte. Celles d'un client inscrit restent derriere sa session.
+ * L'identifiant est un UUID tire au sort : il ne se devine pas, et
+ * c'est le meme principe que le lien de suivi de n'importe quelle
+ * livraison. Ce qu'il revele est ce que son destinataire a lui-meme
+ * saisi, et rien d'autre : aucune autre commande n'est atteignable.
+ */
+router.get('/:id', authFacultative, async (req, res) => {
   const order = await getFullOrder(req.params.id);
   if (!order) return res.status(404).json({ error: 'Commande introuvable.' });
+
+  if (!req.user && order.customerId) {
+    return res.status(401).json({
+      error: 'Connectez-vous pour consulter cette commande.',
+    });
+  }
+
   res.json(order);
 });
 

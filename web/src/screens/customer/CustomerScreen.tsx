@@ -32,6 +32,9 @@ import {
 import { Wordmark } from '../../components/Shell'
 import { LineOptions, OptionPicker } from '../../components/OptionPicker'
 import { Emoji, emojiPlat, emojiPour } from '../../components/Emoji'
+import { useReglages } from '../../lib/reglages'
+import { retenirCommande } from '../../lib/derniereCommande'
+import { RepriseCommande } from '../../components/RepriseCommande'
 
 /** Indicatif : le montant réel est toujours recalculé par le serveur. */
 
@@ -110,6 +113,9 @@ export default function CustomerScreen() {
       )}
 
       <div className="mx-auto max-w-3xl px-4">
+        <div className="pt-4">
+          <RepriseCommande />
+        </div>
         <div className="py-6">
           <h1 className="anim-monte flex items-center gap-2.5 text-[27px] leading-tight font-extrabold tracking-[-0.025em] text-ink-900">
             Notre carte
@@ -251,10 +257,13 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
   const cart = useCustomerCart()
   const user = useAuth((s) => s.user)
   const [mode, setMode] = useState<'pickup' | 'delivery'>('pickup')
+  const { livraison: livraisonOuverte } = useReglages()
+
   const [address, setAddress] = useState('')
   const [zoneList, setZoneList] = useState<DeliveryZone[]>([])
   const [zoneId, setZoneId] = useState<string>('')
   const [phone, setPhone] = useState(user?.phone ?? '')
+  const [nom, setNom] = useState(user?.fullName ?? '')
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [locating, setLocating] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -263,6 +272,18 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
   const navigate = useNavigate()
 
   const zone = zoneList.find((z) => z.id === zoneId) ?? null
+
+  /**
+   * La livraison est proposable quand elle est ouverte ET qu'au moins
+   * une zone est tarifee. Les deux conditions sont necessaires : sans
+   * zone, le serveur ne saurait ni quels frais appliquer ni quel delai
+   * annoncer.
+   */
+  const livraisonPossible = livraisonOuverte && zoneList.length > 0
+  useEffect(() => {
+    if (mode === 'delivery' && !livraisonPossible) setMode('pickup')
+  }, [mode, livraisonPossible])
+
   const fee = mode === 'delivery' ? (zone?.fee ?? 0) : 0
   const cheapest = zoneList.length > 0 ? Math.min(...zoneList.map((z) => z.fee)) : 0
   const missing =
@@ -309,9 +330,24 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
   }
 
   async function submit() {
+    /**
+     * Le compte n'est plus un peage.
+     *
+     * Quelqu'un qui scanne le code pose sur sa table ne creera pas un
+     * compte avant de commander un sandwich : il refermera l'onglet.
+     * Le nom et le telephone suffisent — le telephone reste exige, car
+     * c'est le seul moyen de joindre un client dont la commande pose
+     * probleme.
+     */
     if (!user) {
-      setNeedsAccount(true)
-      return
+      if (nom.trim().length < 2) {
+        notify('Indiquez votre nom.', 'error')
+        return
+      }
+      if (phone.replace(/\D/g, '').length < 8) {
+        notify('Indiquez un téléphone où vous joindre.', 'error')
+        return
+      }
     }
     if (mode === 'delivery') {
       if (address.trim().length < 6) {
@@ -334,6 +370,7 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
     try {
       const order = await orders.createOnline(cart.lines, mode, {
         customerPhone: phone.trim() || undefined,
+        customerName: nom.trim() || user?.fullName || undefined,
         ...(mode === 'delivery'
           ? {
               address: address.trim(),
@@ -343,6 +380,10 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
             }
           : {}),
       })
+      // Le chemin de retour, avant de vider le panier : si le client
+      // ferme son onglet en sortant d'ici, c'est tout ce qui lui restera
+      // pour retrouver sa commande.
+      retenirCommande(order.id, order.orderNumber)
       cart.clear()
       onClose()
       navigate(`/commande/${order.id}`)
@@ -405,6 +446,14 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
           ))}
         </ul>
 
+        {/*
+          * La livraison n'est proposee que si elle est reellement
+          * assurable : le gerant la coupe quand son livreur n'est pas la,
+          * et il faut aussi au moins une zone tarifee. Le serveur le
+          * refusait deja, mais a la toute fin — le client composait sa
+          * commande, saisissait son adresse, et n'apprenait qu'au moment
+          * de confirmer qu'il avait perdu son temps.
+          */}
         <div className="mt-5 grid grid-cols-2 gap-2">
           <ModeCard
             active={mode === 'pickup'}
@@ -415,18 +464,32 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
           />
           <ModeCard
             active={mode === 'delivery'}
+            indisponible={!livraisonPossible}
             icon={Bike}
             label="Livraison"
             detail={
-              zoneList.length === 0
-                ? 'Indisponible'
-                : `dès ${moneyDT(cheapest)}`
+              !livraisonOuverte
+                ? 'Suspendue ce soir'
+                : zoneList.length === 0
+                  ? 'Indisponible'
+                  : `dès ${moneyDT(cheapest)}`
             }
-            onClick={() => setMode('delivery')}
+            onClick={() => livraisonPossible && setMode('delivery')}
           />
         </div>
 
-        {mode === 'delivery' && (
+        {!livraisonPossible && (
+          <p className="anim-surgit mt-2.5 flex items-start gap-2 rounded-[11px] bg-saffron-50 px-3.5 py-3 text-[13px] leading-snug text-saffron-700">
+            <Emoji vie="fretille" className="mt-px">🛵</Emoji>
+            <span>
+              {livraisonOuverte
+                ? "Aucune zone de livraison n'est ouverte pour le moment."
+                : 'La livraison est suspendue en ce moment. Vous pouvez commander et venir récupérer.'}
+            </span>
+          </p>
+        )}
+
+        {mode === 'delivery' && livraisonPossible && (
           <div className="mt-4 space-y-2.5">
             {zoneList.length === 0 ? (
               <p className="rounded-[9px] bg-ink-100 px-3.5 py-3 text-[13px] leading-snug text-ink-600">
@@ -496,10 +559,23 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
           </div>
         )}
 
+        {!user && (
+          <div className="mt-4">
+            <Field label="Votre nom" hint="Pour qu'on vous appelle quand c'est prêt">
+              <Input
+                value={nom}
+                onChange={(e) => setNom(e.target.value)}
+                placeholder="Prénom ou nom"
+                autoComplete="name"
+              />
+            </Field>
+          </div>
+        )}
+
         <div className="mt-4">
           <Field
             label="Votre téléphone"
-            hint="Pour vous prévenir quand c'est prêt"
+            hint={user ? "Pour vous prévenir quand c'est prêt" : 'Obligatoire — pour vous joindre si besoin'}
           >
             <Input
               type="tel"
@@ -554,21 +630,27 @@ function ModeCard({
   icon: Icon,
   label,
   detail,
+  indisponible = false,
   onClick,
 }: {
   active: boolean
   icon: typeof Store
   label: string
   detail: string
+  indisponible?: boolean
   onClick: () => void
 }) {
   return (
     <button
       onClick={onClick}
-      className={`rounded-[11px] border p-3.5 text-left transition-colors ${
-        active
-          ? 'border-petrol-600 bg-petrol-50 ring-1 ring-petrol-600'
-          : 'border-ink-200 hover:border-ink-300'
+      disabled={indisponible}
+      aria-disabled={indisponible}
+      className={`reagit rounded-[13px] border p-3.5 text-left transition-colors ${
+        indisponible
+          ? 'cursor-not-allowed border-ink-200 bg-ink-50 opacity-60'
+          : active
+            ? 'border-petrol-600 bg-petrol-50 ring-1 ring-petrol-600'
+            : 'border-ink-200 hover:border-ink-300'
       }`}
     >
       <Icon

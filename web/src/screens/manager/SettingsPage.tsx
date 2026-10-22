@@ -15,6 +15,7 @@ import { OpeningHoursCard } from './OpeningHoursCard'
 import { DeliveryZonesCard } from './DeliveryZonesCard'
 import { MapTilesCard } from './MapTilesCard'
 import { ServiceCard } from './ServiceCard'
+import { QrCommandeCard } from './QrCommandeCard'
 import { rafraichirReglages } from '../../lib/reglages'
 
 /**
@@ -157,6 +158,8 @@ export default function SettingsPage() {
       />
 
       <DeliveryZonesCard />
+
+      <QrCommandeCard settings={form} />
 
       <ServiceCard
         form={form}

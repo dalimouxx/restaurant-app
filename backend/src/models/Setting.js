@@ -19,6 +19,7 @@ const Setting = sequelize.define('Setting', {
 const { DEFAULT_HOURS, normalizeHours, openingState } = require('../openingHours');
 const { badRequest } = require('../errors');
 const { restaurantCourant } = require('../tenant');
+const { Restaurant } = require('./Restaurant');
 
 /**
  * L'etablissement auquel ce reglage appartient.
@@ -88,6 +89,15 @@ const DEFAULTS = {
   // moyen de paiement. Pour les services sans caissier, ou le gerant
   // confirme lui-meme entre deux clients.
   caisseSimplifiee: 'non',
+
+  // 'oui' : on commande en ligne sans compte, avec un nom et un
+  // telephone. C'est ce qui rend utilisable le code a scanner pose sur
+  // les tables — personne ne cree un compte assis au comptoir, et une
+  // inscription imposee a ce moment-la fait perdre la commande.
+  //
+  // Le telephone reste exige : sans lui, le restaurant n'a aucun moyen
+  // de joindre quelqu'un dont la commande pose probleme.
+  commandeSansCompte: 'oui',
 };
 
 /** Reglages a choix ferme : une valeur inventee est refusee, pas enregistree. */
@@ -95,6 +105,7 @@ const CHOIX = {
   etapesCuisine: ['deux', 'une', 'aucune'],
   livraisonActive: ['oui', 'non'],
   caisseSimplifiee: ['oui', 'non'],
+  commandeSansCompte: ['oui', 'non'],
 };
 
 /** Les horaires sont un objet, pas une ligne de texte : ils ont leur place a part. */
@@ -109,6 +120,20 @@ const MAX_TEXT = 500;
  */
 async function getSettings(now = new Date()) {
   const rows = await Setting.findAll();
+
+  /**
+   * L'etablissement servi accompagne ses reglages.
+   *
+   * La borne, l'ecran de salle et la page d'accueil ont besoin de savoir
+   * ou ils se trouvent : pour afficher le logo, et surtout pour fabriquer
+   * le code a scanner qui ramenera le client sur la bonne carte. Sans
+   * cela l'interface devrait le deviner, et elle se tromperait des qu'un
+   * deuxieme restaurant existe.
+   */
+  const id = restaurantCourant();
+  const etablissement = id
+    ? await Restaurant.findByPk(id, { attributes: ['id', 'name', 'slug', 'logoUrl'] })
+    : null;
   const stored = Object.fromEntries(rows.map((r) => [r.key, r.value]));
 
   const openingHours = normalizeHours(stored.openingHours);
@@ -116,7 +141,19 @@ async function getSettings(now = new Date()) {
     Object.keys(DEFAULTS).map((k) => [k, stored[k] ?? DEFAULTS[k]])
   );
 
-  return { ...text, openingHours, opening: openingState(openingHours, now) };
+  return {
+    ...text,
+    openingHours,
+    opening: openingState(openingHours, now),
+    etablissement: etablissement
+      ? {
+          id: etablissement.id,
+          name: etablissement.name,
+          slug: etablissement.slug,
+          logoUrl: etablissement.logoUrl,
+        }
+      : null,
+  };
 }
 
 /** N'ecrit que les cles connues : une cle inventee est ignoree. */

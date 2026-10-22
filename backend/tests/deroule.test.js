@@ -173,6 +173,63 @@ async function run() {
 
   await regler({ livraisonActive: 'oui' })
 
+  /* ───────── Commander sans compte ─────────
+     Le code a scanner pose sur les tables n'a de sens que si on peut
+     commander sans s'inscrire. Mais une commande sans compte doit
+     rester rattachee a quelqu'un de joignable, et ne pas ouvrir la
+     porte aux commandes des autres. */
+  console.log('\n— Commander sans compte —')
+
+  await regler({ commandeSansCompte: 'oui' })
+
+  const commanderSansCompte = (extra = {}) =>
+    req('POST', '/orders/online', {
+      items: [{ productId: plat.id, quantity: 1, optionIds: [] }],
+      fulfillmentType: 'pickup',
+      ...extra,
+    })
+
+  const sansRien = await commanderSansCompte()
+  check(sansRien.status === 400, 'Sans nom, la commande est refusee')
+
+  const sansTel = await commanderSansCompte({ customerName: 'Ali' })
+  check(sansTel.status === 400, 'Sans telephone non plus : il faut pouvoir le joindre')
+
+  const invite = await commanderSansCompte({
+    customerName: 'Ali Invite', customerPhone: '20123456',
+  })
+  check(invite.status === 201, 'Avec un nom et un telephone, elle passe')
+  check(invite.data.customerId === null, 'Elle n\'appartient a aucun compte')
+  check(invite.data.customerName === 'Ali Invite', 'Le nom saisi est conserve')
+
+  const suivi = await req('GET', `/orders/${invite.data.id}`)
+  check(
+    suivi.status === 200,
+    'Le client suit sa commande sans se connecter : c\'est son seul chemin'
+  )
+
+  // Celle d'un client inscrit, elle, reste derriere sa session.
+  const client = (await req('POST', '/auth/register-customer', {
+    fullName: 'Client Inscrit', phone: '9' + String(Date.now()).slice(-7),
+    password: 'motdepasse123',
+  })).data
+  const aLui = (await req('POST', '/orders/online', {
+    items: [{ productId: plat.id, quantity: 1, optionIds: [] }],
+    fulfillmentType: 'pickup',
+  }, client.token)).data
+  const vol = await req('GET', `/orders/${aLui.id}`)
+  check(
+    vol.status === 401,
+    'Celle d\'un client inscrit n\'est pas lisible sans sa session'
+  )
+
+  await regler({ commandeSansCompte: 'non' })
+  const ferme = await commanderSansCompte({
+    customerName: 'Ali', customerPhone: '20123456',
+  })
+  check(ferme.status === 401, 'Le gerant peut exiger un compte : la commande est alors refusee')
+  await regler({ commandeSansCompte: 'oui' })
+
   console.log(`\n===== ${pass} reussis, ${fail} echecs =====\n`)
   process.exit(fail > 0 ? 1 : 0)
 }
