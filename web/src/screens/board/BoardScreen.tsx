@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChefHat, Volume2, VolumeX } from 'lucide-react'
+import { Volume2, VolumeX } from 'lucide-react'
 import { orders, settingsApi } from '../../lib/api'
 import { joinRoom, on } from '../../lib/socket'
 import type { BoardEntry, Settings } from '../../lib/types'
 import { Wordmark } from '../../components/Shell'
+import { Emoji } from '../../components/Emoji'
 
 /**
  * Écran mural des commandes prêtes.
@@ -115,7 +116,7 @@ export default function BoardScreen() {
         <button
           onClick={toggleSound}
           aria-label={sound ? 'Couper le son' : 'Activer le son'}
-          className="grid size-10 place-items-center rounded-[9px] text-ink-500 transition-colors hover:bg-ink-800 hover:text-white"
+          className="reagit grid size-10 place-items-center rounded-[9px] text-ink-500 transition-colors hover:bg-ink-800 hover:text-white"
         >
           {sound ? <Volume2 size={20} /> : <VolumeX size={20} />}
         </button>
@@ -124,18 +125,20 @@ export default function BoardScreen() {
       <main className="grid flex-1 grid-cols-1 lg:grid-cols-[1fr_1.4fr]">
         {/* En préparation */}
         <section className="border-ink-800 p-8 lg:border-r">
-          <h2 className="mb-6 text-[22px] font-bold tracking-[-0.01em] text-ink-500">
+          <h2 className="mb-6 flex items-center gap-2.5 text-[22px] font-bold tracking-[-0.01em] text-ink-500">
+            <Emoji vie="bat" className="text-[24px]">🔥</Emoji>
             En préparation
           </h2>
           {cooking.length === 0 ? (
             <p className="text-[18px] text-ink-700">—</p>
           ) : (
-            <div className="flex flex-wrap gap-x-7 gap-y-4">
+            <div className="anim-cascade flex flex-wrap items-center gap-x-7 gap-y-4">
               {cooking.map((e) => (
                 <span
                   key={e.orderNumber}
-                  className="num text-[56px] leading-none font-bold text-ink-600"
+                  className="num flex items-center gap-2 text-[56px] leading-none font-bold text-ink-600"
                 >
+                  <Emoji className="text-[34px]">👨‍🍳</Emoji>
                   {String(e.orderNumber).padStart(3, '0')}
                 </span>
               ))}
@@ -145,22 +148,27 @@ export default function BoardScreen() {
 
         {/* Prêtes */}
         <section className="p-8">
-          <h2 className="mb-6 text-[22px] font-bold tracking-[-0.01em] text-petrol-400">
+          <h2 className="mb-6 flex items-center gap-2.5 text-[22px] font-bold tracking-[-0.01em] text-petrol-400">
+            <Emoji vie="rebondit" className="text-[24px]">🛎️</Emoji>
             Prêtes
           </h2>
           {ready.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 pb-20 text-ink-700">
-              <ChefHat size={56} strokeWidth={1.5} />
+              <Emoji vie="flotte" className="text-[64px]">🍔</Emoji>
               <p className="text-[20px]">Aucune commande prête</p>
             </div>
           ) : (
             <div className="flex flex-wrap gap-5">
-              {ready.map((e) => (
+              {ready.map((e, i) => (
                 <span
                   key={e.orderNumber}
-                  className="num animate-ticket-in rounded-[18px] bg-petrol-600 px-8 py-5 text-[88px] leading-none font-bold text-white"
+                  style={{ animationDelay: `${i * 90}ms` }}
+                  className="anim-surgit anim-halo num flex items-center gap-4 rounded-[22px] bg-petrol-600 px-8 py-5 text-[88px] leading-none font-bold text-white"
                 >
                   {String(e.orderNumber).padStart(3, '0')}
+                  <Emoji vie="rebondit" retard={i * 180} className="text-[52px]">
+                    🎉
+                  </Emoji>
                 </span>
               ))}
             </div>

@@ -31,6 +31,7 @@ import {
 } from '../../components/ui'
 import { Wordmark } from '../../components/Shell'
 import { LineOptions, OptionPicker } from '../../components/OptionPicker'
+import { Emoji, emojiPlat, emojiPour } from '../../components/Emoji'
 
 /** Indicatif : le montant réel est toujours recalculé par le serveur. */
 
@@ -110,8 +111,9 @@ export default function CustomerScreen() {
 
       <div className="mx-auto max-w-3xl px-4">
         <div className="py-6">
-          <h1 className="text-[27px] leading-tight font-extrabold tracking-[-0.025em] text-ink-900">
+          <h1 className="anim-monte flex items-center gap-2.5 text-[27px] leading-tight font-extrabold tracking-[-0.025em] text-ink-900">
             Notre carte
+            <Emoji vie="rebondit" className="text-[28px]">🍟</Emoji>
           </h1>
           <p className="mt-1 text-[14.5px] text-ink-500">
             Retrait sur place ou livraison, paiement à la réception.
@@ -126,12 +128,15 @@ export default function CustomerScreen() {
                   <button
                     key={c.id}
                     onClick={() => setActiveCat(c.id)}
-                    className={`h-9 shrink-0 rounded-full px-4 text-[14px] font-bold transition-colors ${
+                    className={`reagit flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-[14px] font-bold transition-colors ${
                       c.id === activeCat
                         ? 'bg-ink-900 text-white'
                         : 'border border-ink-200 bg-white text-ink-600'
                     }`}
                   >
+                    <Emoji vie={c.id === activeCat ? 'fretille' : 'immobile'}>
+                      {emojiPour(c.name)}
+                    </Emoji>
                     {c.name}
                   </button>
                 ))}
@@ -144,16 +149,19 @@ export default function CustomerScreen() {
           ) : visible.length === 0 ? (
             <EmptyState icon={UtensilsCrossed} title="Rien dans cette catégorie" />
           ) : (
-            visible.map((p) => (
+            <div key={activeCat ?? 'tout'} className="anim-cascade space-y-2.5">
+            {visible.map((p) => (
               <MenuRow
                 key={p.id}
+                categorie={categories.find((c) => c.id === p.categoryId)?.name}
                 product={p}
                 onAdd={() => {
                   if ((p.options?.length ?? 0) === 0) cart.add(p)
                   else setPicking(p)
                 }}
               />
-            ))
+            ))}
+            </div>
           )}
         </div>
       </div>
@@ -187,7 +195,15 @@ export default function CustomerScreen() {
   )
 }
 
-function MenuRow({ product, onAdd }: { product: Product; onAdd: () => void }) {
+function MenuRow({
+  product,
+  categorie,
+  onAdd,
+}: {
+  product: Product
+  categorie?: string
+  onAdd: () => void
+}) {
   const out = !product.isAvailable
   return (
     <Card className={`flex items-center gap-3.5 p-3.5 ${out ? 'opacity-55' : ''}`}>
@@ -195,8 +211,10 @@ function MenuRow({ product, onAdd }: { product: Product; onAdd: () => void }) {
         {product.imageUrl ? (
           <img src={product.imageUrl} alt="" className="size-full object-cover" loading="lazy" />
         ) : (
-          <div className="grid size-full place-items-center text-ink-300">
-            <UtensilsCrossed size={20} strokeWidth={1.6} />
+          <div className="grid size-full place-items-center bg-gradient-to-br from-saffron-50 to-petrol-50">
+            <Emoji vie="flotte" className="text-[28px]">
+              {emojiPlat(product.name, categorie)}
+            </Emoji>
           </div>
         )}
       </div>

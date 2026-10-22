@@ -311,3 +311,192 @@
     animation: sweep 1.4s ease-in-out infinite;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   Socle de motion
+   ───────────────────────────────────────────────────────────
+   Tout ce qui bouge ici n'anime que `transform` et `opacity`.
+   Ces deux proprietes sautent le calcul de mise en page et le
+   dessin : le navigateur les confie au compositeur, et elles
+   continuent de tourner rond pendant que la page charge ses
+   donnees. C'est une contrainte, pas une preference — une
+   caisse qui saccade pendant un coup de feu est un defaut,
+   pas un detail d'esthetique.
+
+   Les durees restent sous 300 ms. Une animation d'interface
+   plus longue ne parait pas plus soignee, elle parait lente.
+   ═══════════════════════════════════════════════════════════ */
+
+@theme {
+  /* Les courbes integrees du navigateur sont trop molles pour
+     de l'interface. Celles-ci demarrent franchement et se
+     posent en douceur — c'est ce qui donne l'impression que
+     l'ecran repond vite, meme a duree egale. */
+  --ease-sortie: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-deplacement: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-tiroir: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Depassement leger, reserve au plaisir : jamais sur un
+     geste que l'employe repete trois cents fois par service. */
+  --ease-ressort: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@layer utilities {
+  /* ── Entrees ────────────────────────────────────────────── */
+
+  @keyframes surgit {
+    from { opacity: 0; transform: translate3d(0, 10px, 0) scale(0.96); }
+    to   { opacity: 1; transform: none; }
+  }
+  /* Jamais depuis scale(0) : rien, dans le monde reel,
+     n'apparait a partir de rien. */
+  .anim-surgit { animation: surgit 260ms var(--ease-ressort) both; }
+
+  @keyframes fondu-monte {
+    from { opacity: 0; transform: translate3d(0, 14px, 0); }
+    to   { opacity: 1; transform: none; }
+  }
+  .anim-monte { animation: fondu-monte 240ms var(--ease-sortie) both; }
+
+  /* Une liste entiere qui apparait d'un bloc se lit comme un
+     clignotement. Decalee de quelques dizaines de millisecondes,
+     elle se lit comme une arrivee. */
+  .anim-cascade > * { animation: surgit 260ms var(--ease-ressort) both; }
+  .anim-cascade > *:nth-child(1) { animation-delay: 0ms; }
+  .anim-cascade > *:nth-child(2) { animation-delay: 45ms; }
+  .anim-cascade > *:nth-child(3) { animation-delay: 90ms; }
+  .anim-cascade > *:nth-child(4) { animation-delay: 135ms; }
+  .anim-cascade > *:nth-child(5) { animation-delay: 180ms; }
+  .anim-cascade > *:nth-child(6) { animation-delay: 225ms; }
+  .anim-cascade > *:nth-child(7) { animation-delay: 270ms; }
+  .anim-cascade > *:nth-child(8) { animation-delay: 315ms; }
+  .anim-cascade > *:nth-child(n + 9) { animation-delay: 360ms; }
+
+  /* ── Emoji vivants ─────────────────────────────────────────
+     Reserves aux ecrans que regarde le client. Sur un poste de
+     travail, un element qui bouge en permanence dans le champ
+     de vision fatigue et finit par etre ignore. */
+
+  @keyframes rebondit {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    30%      { transform: translate3d(0, -22%, 0) scale(1.06); }
+    55%      { transform: translate3d(0, 0, 0) scale(0.96); }
+    75%      { transform: translate3d(0, -7%, 0) scale(1.02); }
+  }
+  .emoji-rebondit { animation: rebondit 1.6s var(--ease-sortie) infinite; }
+
+  @keyframes fretille {
+    0%, 100% { transform: rotate(0deg); }
+    25%      { transform: rotate(-11deg); }
+    75%      { transform: rotate(11deg); }
+  }
+  .emoji-fretille { animation: fretille 1.1s ease-in-out infinite; }
+
+  @keyframes flotte {
+    0%, 100% { transform: translate3d(0, 0, 0) rotate(-3deg); }
+    50%      { transform: translate3d(0, -14%, 0) rotate(3deg); }
+  }
+  .emoji-flotte { animation: flotte 3.2s ease-in-out infinite; }
+
+  @keyframes bat {
+    0%, 100% { transform: scale(1); }
+    15%      { transform: scale(1.18); }
+    30%      { transform: scale(1); }
+    45%      { transform: scale(1.12); }
+  }
+  .emoji-bat { animation: bat 1.8s ease-out infinite; }
+
+  @keyframes tourne {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .emoji-tourne { animation: tourne 2.4s linear infinite; }
+
+  /* ── Etats ─────────────────────────────────────────────────
+     L'anneau d'appel tourne en boucle sur un ecran allume toute
+     la journee. En `box-shadow` il forcait un redessin a chaque
+     image ; en transform sur une couche a part, il ne coute
+     plus rien. */
+
+  @keyframes halo {
+    0%   { opacity: 0.55; transform: scale(1); }
+    70%  { opacity: 0;    transform: scale(1.5); }
+    100% { opacity: 0;    transform: scale(1.5); }
+  }
+  .anim-halo { position: relative; }
+  .anim-halo::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: currentColor;
+    opacity: 0;
+    animation: halo 1.9s var(--ease-sortie) infinite;
+    pointer-events: none;
+  }
+
+  @keyframes appelle {
+    0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+    8%       { transform: translate3d(0, -8px, 0) scale(1.03); }
+    16%      { transform: translate3d(0, 0, 0) scale(1); }
+    24%      { transform: translate3d(0, -4px, 0) scale(1.015); }
+    32%      { transform: translate3d(0, 0, 0) scale(1); }
+  }
+  /* Le numero qu'on vient d'appeler saute une fois, puis se
+     tient tranquille : c'est l'appel qui doit attirer l'oeil,
+     pas la ligne pour toujours. */
+  .anim-appelle { animation: appelle 3.4s var(--ease-sortie) infinite; }
+
+  /* ── Retour au doigt ───────────────────────────────────────
+     Sur l'appui, pas au relachement : attendre le relachement
+     fait paraitre l'ecran mort. */
+  .reagit { transition: transform 110ms var(--ease-sortie); }
+  .reagit:active { transform: scale(0.97); }
+  .reagit-fort { transition: transform 130ms var(--ease-sortie); }
+  .reagit-fort:active { transform: scale(0.94); }
+
+  /* Le survol ne vaut que pour une vraie souris : au doigt, il
+     se declenche au toucher et laisse l'element allume. */
+  @media (hover: hover) and (pointer: fine) {
+    .leve { transition: transform 180ms var(--ease-sortie); }
+    .leve:hover { transform: translate3d(0, -3px, 0); }
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   Mouvement reduit
+   ───────────────────────────────────────────────────────────
+   Reduit ne veut pas dire supprime : on garde ce qui aide a
+   comprendre — les fondus, les changements de couleur — et on
+   retire le deplacement, qui est ce qui gene reellement.
+   ═══════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  .emoji-rebondit,
+  .emoji-fretille,
+  .emoji-flotte,
+  .emoji-bat,
+  .emoji-tourne,
+  .anim-appelle,
+  .animate-sweep,
+  .anim-halo::after {
+    animation: none !important;
+  }
+
+  .anim-surgit,
+  .anim-monte,
+  .anim-cascade > * {
+    animation: paraît 180ms ease both !important;
+    animation-delay: 0ms !important;
+  }
+
+  @keyframes paraît {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  .reagit:active,
+  .reagit-fort:active,
+  .leve:hover {
+    transform: none;
+  }
+}

@@ -1,3 +1,4 @@
+import { etablissementCourant } from './etablissement'
 import type {
   AuditEntry,
   BoardEntry,
@@ -116,6 +117,17 @@ async function request<T>(
     const token = getToken()
     if (token) headers.Authorization = `Bearer ${token}`
   }
+
+  /**
+   * L'établissement de cet appareil accompagne chaque requête.
+   *
+   * La borne et l'écran de salle n'ont pas de session : sans ce repère,
+   * le serveur ne sait pas lequel des fastfoods de l'installation leur
+   * répondre, et il refuse plutôt que de deviner. Pour un poste connecté
+   * le jeton fait foi de toute façon, donc l'envoyer ne coûte rien.
+   */
+  const etablissement = etablissementCourant()
+  if (etablissement) headers['X-Restaurant'] = etablissement
 
   let res: Response
   try {

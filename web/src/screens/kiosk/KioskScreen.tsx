@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Minus, Plus, ShoppingBag, Trash2, UtensilsCrossed } from 'lucide-react'
+import { Minus, Plus, Trash2, UtensilsCrossed } from 'lucide-react'
 import { catalog, orders } from '../../lib/api'
 import { on } from '../../lib/socket'
 import { lineUnitPrice, useKioskCart } from '../../lib/store'
@@ -7,6 +7,7 @@ import { moneyDT, orderNo } from '../../lib/format'
 import type { Category, Product } from '../../lib/types'
 import { Button, EmptyState, Skeleton, useToast } from '../../components/ui'
 import { Wordmark } from '../../components/Shell'
+import { Emoji, emojiPlat, emojiPour } from '../../components/Emoji'
 import { LineOptions, OptionPicker } from '../../components/OptionPicker'
 
 type Stage = 'ordering' | 'done'
@@ -84,8 +85,9 @@ export default function KioskScreen() {
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="shrink-0 px-6 pt-6 pb-4 sm:px-10 sm:pt-10">
           <Wordmark dark={false} />
-          <h1 className="mt-5 text-[30px] leading-[1.15] font-extrabold tracking-[-0.025em] text-ink-900 sm:text-[38px]">
+          <h1 className="anim-monte mt-5 flex flex-wrap items-center gap-3 text-[30px] leading-[1.15] font-extrabold tracking-[-0.025em] text-ink-900 sm:text-[38px]">
             Composez votre commande
+            <Emoji vie="rebondit" className="text-[34px] sm:text-[42px]">🍔</Emoji>
           </h1>
           <p className="mt-1.5 text-[15px] text-ink-500">
             Touchez un plat pour l'ajouter. Vous paierez en caisse.
@@ -100,12 +102,18 @@ export default function KioskScreen() {
                   <button
                     key={c.id}
                     onClick={() => setActiveCat(c.id)}
-                    className={`h-11 shrink-0 rounded-full px-5 text-[15px] font-bold transition-colors ${
+                    className={`reagit flex h-12 shrink-0 items-center gap-2 rounded-full px-5 text-[15px] font-bold transition-colors ${
                       c.id === activeCat
                         ? 'bg-ink-900 text-white'
                         : 'border border-ink-200 bg-white text-ink-700 hover:border-ink-300'
                     }`}
                   >
+                    <Emoji
+                      vie={c.id === activeCat ? 'fretille' : 'immobile'}
+                      className="text-[19px]"
+                    >
+                      {emojiPour(c.name)}
+                    </Emoji>
                     {c.name}
                   </button>
                 ))}
@@ -126,10 +134,14 @@ export default function KioskScreen() {
               description="Choisissez une autre catégorie ci-dessus."
             />
           ) : (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4">
+            <div
+              key={activeCat ?? 'tout'}
+              className="anim-cascade grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-4"
+            >
               {visible.map((p) => (
                 <ProductTile
                   key={p.id}
+                  categorie={categories.find((c) => c.id === p.categoryId)?.name}
                   product={p}
                   onAdd={() => {
                     // Un plat sans variante part directement au panier.
@@ -160,15 +172,18 @@ export default function KioskScreen() {
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {cart.lines.length === 0 ? (
-            <EmptyState
-              icon={ShoppingBag}
-              title="Panier vide"
-              description="Vos plats apparaîtront ici."
-            />
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+              <Emoji vie="flotte" className="text-[44px]">🛒</Emoji>
+              <p className="text-[15px] font-bold text-ink-700">Panier vide</p>
+              <p className="text-[13px] text-ink-500">Vos plats apparaîtront ici.</p>
+            </div>
           ) : (
             <ul className="divide-y divide-ink-100">
               {cart.lines.map((line, i) => (
-                <li key={`${line.product.id}-${i}`} className="flex items-center gap-3 px-5 py-3.5">
+                <li
+                  key={`${line.product.id}-${i}`}
+                  className="anim-surgit flex items-center gap-3 px-5 py-3.5"
+                >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14.5px] font-semibold text-ink-900">
                       {line.product.name}
@@ -182,7 +197,7 @@ export default function KioskScreen() {
                     <button
                       onClick={() => cart.decrement(i)}
                       aria-label="Retirer un"
-                      className="grid size-8 place-items-center rounded-full text-ink-600 transition-colors hover:bg-ink-100"
+                      className="reagit-fort grid size-9 place-items-center rounded-full text-ink-600 transition-colors hover:bg-ink-100"
                     >
                       <Minus size={15} strokeWidth={2.4} />
                     </button>
@@ -192,7 +207,7 @@ export default function KioskScreen() {
                     <button
                       onClick={() => cart.increment(i)}
                       aria-label="Ajouter un"
-                      className="grid size-8 place-items-center rounded-full text-ink-600 transition-colors hover:bg-ink-100"
+                      className="reagit-fort grid size-9 place-items-center rounded-full text-ink-600 transition-colors hover:bg-ink-100"
                     >
                       <Plus size={15} strokeWidth={2.4} />
                     </button>
@@ -218,12 +233,15 @@ export default function KioskScreen() {
                 <button
                   key={value}
                   onClick={() => setMode(value)}
-                  className={`h-12 rounded-[9px] text-[14.5px] font-bold transition-colors ${
+                  className={`reagit flex h-12 items-center justify-center gap-2 rounded-[11px] text-[14.5px] font-bold transition-colors ${
                     mode === value
                       ? 'bg-petrol-50 text-petrol-700 ring-2 ring-petrol-600 ring-inset'
                       : 'border border-ink-200 text-ink-600 hover:border-ink-300'
                   }`}
                 >
+                  <Emoji vie={mode === value ? 'fretille' : 'immobile'}>
+                    {value === 'dine_in' ? '🍽️' : '🥡'}
+                  </Emoji>
                   {label}
                 </button>
               ))}
@@ -231,7 +249,10 @@ export default function KioskScreen() {
 
             <div className="mb-4 flex items-baseline justify-between">
               <span className="text-[15px] font-semibold text-ink-600">Total</span>
-              <span className="num text-[26px] font-extrabold tracking-[-0.02em] text-ink-900">
+              <span
+                key={cart.subtotal()}
+                className="anim-surgit num text-[26px] font-extrabold tracking-[-0.02em] text-ink-900"
+              >
                 {moneyDT(cart.subtotal())}
               </span>
             </div>
@@ -261,16 +282,31 @@ export default function KioskScreen() {
   )
 }
 
-function ProductTile({ product, onAdd }: { product: Product; onAdd: () => void }) {
+function ProductTile({
+  product,
+  categorie,
+  onAdd,
+}: {
+  product: Product
+  categorie?: string
+  onAdd: () => void
+}) {
   const out = !product.isAvailable
   return (
+    /*
+     * `transition-all` a disparu : il animait aussi la position et la
+     * taille, que le navigateur ne peut pas confier au compositeur. Sur
+     * une borne tactile, le survol est egalement reserve a une vraie
+     * souris — au doigt il se declenche au toucher et laisse la tuile
+     * allumee apres que le client a retire la main.
+     */
     <button
       onClick={onAdd}
       disabled={out}
-      className={`group flex flex-col overflow-hidden rounded-[13px] border bg-white text-left transition-all ${
+      className={`reagit group flex flex-col overflow-hidden rounded-[18px] border bg-white text-left ${
         out
           ? 'cursor-not-allowed border-ink-200 opacity-55'
-          : 'border-ink-200 hover:-translate-y-0.5 hover:border-petrol-400 hover:shadow-[0_6px_20px_-8px_rgba(11,107,91,0.35)] active:translate-y-0'
+          : 'leve border-ink-200 [transition:border-color_180ms_var(--ease-sortie),box-shadow_180ms_var(--ease-sortie),transform_130ms_var(--ease-sortie)] hover:border-petrol-400 hover:shadow-[0_10px_28px_-10px_rgba(11,107,91,0.45)]'
       }`}
     >
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-ink-100">
@@ -282,8 +318,10 @@ function ProductTile({ product, onAdd }: { product: Product; onAdd: () => void }
             loading="lazy"
           />
         ) : (
-          <div className="grid size-full place-items-center text-ink-300">
-            <UtensilsCrossed size={30} strokeWidth={1.5} />
+          <div className="grid size-full place-items-center bg-gradient-to-br from-saffron-50 to-petrol-50">
+            <Emoji vie="flotte" className="text-[46px]">
+              {emojiPlat(product.name, categorie)}
+            </Emoji>
           </div>
         )}
         {out && (
@@ -304,8 +342,8 @@ function ProductTile({ product, onAdd }: { product: Product; onAdd: () => void }
             {moneyDT(product.price)}
           </span>
           {!out && (
-            <span className="grid size-8 place-items-center rounded-full bg-petrol-50 text-petrol-600 transition-colors group-hover:bg-petrol-600 group-hover:text-white">
-              <Plus size={17} strokeWidth={2.6} />
+            <span className="grid size-9 place-items-center rounded-full bg-petrol-50 text-petrol-600 [transition:background-color_160ms_var(--ease-sortie),color_160ms_var(--ease-sortie),transform_160ms_var(--ease-ressort)] group-hover:bg-petrol-600 group-hover:text-white group-active:scale-90">
+              <Plus size={18} strokeWidth={2.8} />
             </span>
           )}
         </div>
@@ -328,12 +366,19 @@ function KioskDone({ number, onRestart }: { number: number; onRestart: () => voi
 
   return (
     <div className="dark-surface flex h-dvh flex-col items-center justify-center bg-ink-900 px-6 text-center">
-      <p className="text-[17px] font-semibold text-ink-400">Commande enregistrée</p>
-      <p className="mt-2 max-w-md text-[26px] leading-tight font-bold text-white sm:text-[32px]">
+      <div className="flex gap-3">
+        <Emoji vie="rebondit" className="text-[40px]">🎉</Emoji>
+        <Emoji vie="rebondit" retard={160} className="text-[40px]">🍟</Emoji>
+        <Emoji vie="rebondit" retard={320} className="text-[40px]">🥤</Emoji>
+      </div>
+      <p className="anim-monte mt-5 text-[17px] font-semibold text-ink-400">
+        Commande enregistrée
+      </p>
+      <p className="anim-monte mt-2 max-w-md text-[26px] leading-tight font-bold text-white sm:text-[32px]">
         Présentez ce numéro en caisse
       </p>
 
-      <div className="animate-ticket-in mt-10 rounded-[20px] bg-white px-14 py-8">
+      <div className="anim-surgit mt-10 rounded-[26px] bg-white px-14 py-8 shadow-[0_24px_60px_-20px_rgba(11,107,91,0.6)]">
         <span className="num block text-[84px] leading-none font-bold tracking-[-0.04em] text-petrol-600 sm:text-[110px]">
           {orderNo(number)}
         </span>
@@ -345,7 +390,7 @@ function KioskDone({ number, onRestart }: { number: number; onRestart: () => voi
 
       <button
         onClick={onRestart}
-        className="mt-8 text-[14px] font-semibold text-ink-400 underline-offset-4 transition-colors hover:text-white hover:underline"
+        className="reagit mt-8 text-[14px] font-semibold text-ink-400 underline-offset-4 transition-colors hover:text-white hover:underline"
       >
         Nouvelle commande ({left})
       </button>

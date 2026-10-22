@@ -7,6 +7,7 @@ import { joinRoom, on } from '../../lib/socket'
 import { moneyDT, orderNo, statusLabel, trackingIndex, trackingSteps } from '../../lib/format'
 import type { Order } from '../../lib/types'
 import { Button, Card, Skeleton, useToast } from '../../components/ui'
+import { Emoji, EMOJI_ETAT } from '../../components/Emoji'
 import { DeliveryMap } from '../../components/DeliveryMap'
 
 const TIPS = [1, 2, 5]
@@ -119,11 +120,23 @@ export default function TrackingScreen() {
       <div className="mx-auto max-w-lg space-y-4 px-4 py-5">
         {/* Statut */}
         <Card className="p-5">
-          <p className="text-[21px] leading-tight font-extrabold tracking-[-0.02em] text-petrol-700">
-            {statusLabel[order.status]}
-          </p>
+          <div className="flex items-center gap-3.5">
+            <Emoji
+              key={order.status}
+              vie={EMOJI_ETAT[order.status]?.vie ?? 'immobile'}
+              className="anim-surgit text-[40px]"
+            >
+              {EMOJI_ETAT[order.status]?.emoji ?? '🍽️'}
+            </Emoji>
+            <p
+              key={`${order.status}-texte`}
+              className="anim-monte text-[21px] leading-tight font-extrabold tracking-[-0.02em] text-petrol-700"
+            >
+              {statusLabel[order.status]}
+            </p>
+          </div>
 
-          <ol className="mt-5 space-y-0">
+          <ol className="anim-cascade mt-5 space-y-0">
             {steps.map((label, i) => {
               const done = i <= current
               const last = i === steps.length - 1
@@ -133,7 +146,7 @@ export default function TrackingScreen() {
                     <span
                       className={`grid size-5 shrink-0 place-items-center rounded-full ${
                         done ? 'bg-petrol-600 text-white' : 'border-2 border-ink-200'
-                      }`}
+                      } ${i === current && !last ? 'anim-halo' : ''}`}
                     >
                       {done && <Check size={12} strokeWidth={3.2} />}
                     </span>
