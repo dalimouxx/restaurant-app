@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Suspense, lazy, type ReactNode } from 'react'
 import {
+  Building2,
   LayoutDashboard,
   Package,
   Receipt,
@@ -33,6 +34,7 @@ import MyOrdersScreen from './screens/customer/MyOrdersScreen'
 const TrackingScreen = lazy(() => import('./screens/customer/TrackingScreen'))
 const DriverScreen = lazy(() => import('./screens/driver/DriverScreen'))
 const FinancePage = lazy(() => import('./screens/manager/FinancePage'))
+const RestaurantsPage = lazy(() => import('./screens/admin/RestaurantsPage'))
 const StockPage = lazy(() => import('./screens/manager/StockPage'))
 const TeamPage = lazy(() => import('./screens/manager/TeamPage'))
 const CashSessionsPage = lazy(() => import('./screens/manager/CashSessionsPage'))
@@ -85,6 +87,24 @@ function RequireSession({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/**
+ * L'entree « Établissements » n'apparait que pour le super admin.
+ *
+ * Un gerant administre son restaurant et ignore jusqu'a l'existence des
+ * autres : lui montrer une porte qui se referme sur un refus serait
+ * doublement inutile.
+ */
+function navDuRole(role: string | undefined): NavItem[] {
+  const base = MANAGER_NAV
+  if (role === 'super_admin' || role === 'admin') {
+    return [
+      { to: '/gestion/etablissements', label: 'Établissements', icon: Building2 },
+      ...base,
+    ]
+  }
+  return base
+}
+
 const MANAGER_NAV: NavItem[] = [
   { to: '/gestion', label: 'Finances', icon: LayoutDashboard, end: true },
   { to: '/gestion/carte', label: 'Carte', icon: UtensilsCrossed },
@@ -105,7 +125,7 @@ function ManagerShell({
   children: ReactNode
 }) {
   return (
-    <Shell nav={MANAGER_NAV} title={title} subtitle={subtitle}>
+    <Shell nav={navDuRole(useAuth((s) => s.user?.role))} title={title} subtitle={subtitle}>
       {children}
     </Shell>
   )
@@ -284,6 +304,26 @@ export default function App() {
                   subtitle="Informations imprimées sur les tickets"
                 >
                   <SettingsPage />
+                </ManagerShell>
+              </Guard>
+            }
+          />
+
+          {/*
+            * Les etablissements : le seul ecran qui voit au-dessus des
+            * cloisons, donc le seul reserve au super admin. Un gerant
+            * qui tomberait dessus n'y verrait rien, le serveur refusant
+            * de lui repondre.
+            */}
+          <Route
+            path="/gestion/etablissements"
+            element={
+              <Guard allow={['super_admin', 'admin']} intent="manager">
+                <ManagerShell
+                  title="Établissements"
+                  subtitle="Les fastfoods de cette installation"
+                >
+                  <RestaurantsPage />
                 </ManagerShell>
               </Guard>
             }

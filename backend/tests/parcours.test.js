@@ -152,10 +152,19 @@ async function run() {
     'LE POINT QUI MANQUAIT : le cuisinier la voit sur son ecran, sans qu\'aucun caissier n\'intervienne'
   );
 
+  const fileDeCaisse = (await api('GET', '/orders/pending-payment', null, cash)).data;
   check(
-    !(await api('GET', '/orders/pending-payment', null, cash)).data
-      .some((o) => o.orderNumber === numero),
+    !fileDeCaisse.some((o) => o.orderNumber === numero),
     'Elle n\'attend pas dans une file de caisse que personne ne tient'
+  );
+
+  /* Meme regle qu'en cuisine : un caissier qui voit deux « 42 » dans sa
+     file n'a aucun moyen de savoir lequel est celui du client plante
+     devant lui. */
+  const numerosCaisse = fileDeCaisse.map((o) => o.orderNumber);
+  check(
+    numerosCaisse.length === new Set(numerosCaisse).size,
+    'Aucun numero en double dans la file de la caisse'
   );
 
   // La cuisine la termine, la salle l'appelle.

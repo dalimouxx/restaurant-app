@@ -1,5 +1,6 @@
 import { etablissementCourant } from './etablissement'
 import type {
+  Restaurant,
   AuditEntry,
   BoardEntry,
   CancelReason,
@@ -561,4 +562,21 @@ export const users = {
     request<{ fullName: string; role: Role; qrImage: string }>(`/users/${id}/badge`),
   toggleActive: (id: string) =>
     request<User>(`/users/${id}/toggle-active`, { method: 'POST' }),
+}
+
+/**
+ * Les établissements de l'installation.
+ *
+ * Réservé au super admin : c'est le seul rôle qui voit au-dessus des
+ * cloisons. Un gérant administre son restaurant et ignore jusqu'à
+ * l'existence des autres.
+ */
+export const restaurants = {
+  list: () => request<Restaurant[]>('/restaurants'),
+  create: (body: { name: string; slug?: string; notes?: string; logoUrl?: string }) =>
+    request<Restaurant>('/restaurants', { method: 'POST', body }),
+  update: (
+    id: string,
+    body: Partial<{ name: string; notes: string; logoUrl: string | null; isActive: boolean }>,
+  ) => request<Restaurant>(`/restaurants/${id}`, { method: 'PATCH', body }),
 }

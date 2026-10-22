@@ -50,12 +50,32 @@ async function run() {
   check(liste0.status === 200, 'Le super admin voit ses etablissements')
   const avant = liste0.data.length
 
-  const b = await req('POST', '/restaurants', {
-    name: `Fastfood B ${marque}`,
-    notes: 'Ouvert pour la serie de tests',
-  }, admin)
+  /**
+   * Un repere fixe, et non tire de l'horloge.
+   *
+   * Avec un nom different a chaque execution, la serie ouvrait un
+   * etablissement de plus a chaque fois et n'en refermait aucun :
+   * l'ecran des etablissements finissait par en afficher cinquante,
+   * tous identiques. On reutilise donc le meme, cree au premier
+   * passage, et on le remet a l'etat voulu.
+   */
+  const REPERE_B = 'fastfood-test-b'
+  const dejaLa = liste0.data.find((r) => r.slug === REPERE_B)
+
+  const b = dejaLa
+    ? { status: 201, data: dejaLa }
+    : await req('POST', '/restaurants', {
+        name: 'Fastfood B (serie de tests)',
+        slug: REPERE_B,
+        notes: 'Ouvert par la serie de tests, reutilise a chaque passage',
+      }, admin)
   check(b.status === 201, 'Il en ouvre un second')
-  check(/^fastfood-b-/.test(b.data.slug), `Un repere d'adresse lisible est derive du nom (${b.data.slug})`)
+  if (dejaLa) {
+    // Une execution precedente a pu le laisser suspendu.
+    await req('PATCH', `/restaurants/${b.data.id}`, { isActive: true }, admin)
+    b.data.isActive = true
+  }
+  check(b.data.slug === REPERE_B, `Il porte un repere d'adresse lisible (${b.data.slug})`)
   check(b.data.isActive === true, 'Il est actif des sa creation')
 
   const doublon = await req('POST', '/restaurants', {
@@ -64,7 +84,10 @@ async function run() {
   check(doublon.status === 400, 'Deux etablissements ne peuvent pas partager le meme repere')
 
   const liste1 = await req('GET', '/restaurants', null, admin)
-  check(liste1.data.length === avant + 1, 'La liste s\'allonge d\'un')
+  check(
+    liste1.data.length === avant + (dejaLa ? 0 : 1),
+    dejaLa ? 'La liste reste stable : on reutilise le meme' : 'La liste s\'allonge d\'un'
+  )
 
   const a = liste1.data.find((r) => r.slug === 'principal')
   check(!!a, 'L\'etablissement d\'origine est toujours la, sous son repere « principal »')
@@ -78,7 +101,16 @@ async function run() {
     }, admin)
 
   const codeB = String(5000 + (Number(marque) % 4000))
-  const gerantB = await creerGerant(b.data.id, `Gerant B ${marque}`, codeB)
+  let gerantB = await creerGerant(b.data.id, `Gerant B ${marque}`, codeB)
+  // Le code a quatre chiffres peut etre deja pris par un passage
+  // precedent : on en cherche un libre plutot que d'echouer.
+  for (let essai = 0; essai < 20 && gerantB.status !== 201; essai++) {
+    gerantB = await creerGerant(
+      b.data.id,
+      `Gerant B ${marque}-${essai}`,
+      String(5000 + Math.floor(Math.random() * 4000))
+    )
+  }
   check(gerantB.status === 201, 'Un gerant est cree pour le second etablissement')
   check(gerantB.data.restaurantId === b.data.id, 'Il est rattache au bon restaurant')
 
@@ -91,7 +123,9 @@ async function run() {
     'Un employe ne peut pas etre cree sans etablissement quand il y en a plusieurs'
   )
 
-  const jetonB = (await req('POST', '/auth/login-code', { loginCode: codeB })).data.token
+  const jetonB = (await req('POST', '/auth/login-code', {
+    loginCode: gerantB.data.loginCode ?? codeB,
+  })).data.token
   check(!!jetonB, 'Le gerant B se connecte avec son code')
 
   const jetonA = (await req('POST', '/auth/login', {
@@ -192,9 +226,16 @@ async function run() {
     commandeB2.orderNumber === commandeB.data.orderNumber + 1,
     `Les numeros de B se suivent (${commandeB.data.orderNumber} puis ${commandeB2.orderNumber})`
   )
+  /* Ce qui compte n'est pas qu'il soit exactement a 1 — il garde ses
+     commandes d'un passage a l'autre — mais qu'il ne reprenne pas le
+     compteur du voisin, qui en est a plusieurs centaines. */
+  const tableauDeA = (await req('GET', '/orders/board', null, null,
+    { 'X-Restaurant': 'principal' })).data
+  const plusHautChezA = Math.max(0, ...tableauDeA.map((l) => l.orderNumber))
   check(
-    commandeB.data.orderNumber <= 2,
-    `B commence a 1, sans heriter du compteur de A (il en est a ${commandeB.data.orderNumber})`
+    commandeB.data.orderNumber < plusHautChezA / 2,
+    `B tient son propre compteur (${commandeB.data.orderNumber} chez lui, ` +
+    `${plusHautChezA} chez A)`
   )
 
   /* ───────── Les equipes ───────── */

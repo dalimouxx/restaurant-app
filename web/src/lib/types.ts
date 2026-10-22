@@ -335,3 +335,23 @@ export interface CartLine {
   /** Choix retenus. Le serveur recalcule prix et intitulés à partir d'eux. */
   options: ProductOption[]
 }
+
+/**
+ * Un établissement de l'installation, vu par le super admin.
+ *
+ * Les deux compteurs ne sont pas décoratifs : avec trente fastfoods, ils
+ * sont le seul moyen de repérer d'un coup d'œil celui qui ne travaille
+ * plus — zéro employé, zéro commande — et celui qu'il ne faut surtout
+ * pas suspendre en plein service.
+ */
+export interface Restaurant {
+  id: string
+  name: string
+  slug: string
+  logoUrl: string | null
+  isActive: boolean
+  notes: string | null
+  createdAt: string
+  employes: number
+  commandesEnCours: number
+}

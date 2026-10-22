@@ -408,13 +408,23 @@ async function getFullOrder(orderId) {
  * heures couvrent largement un service, meme a cheval sur minuit, sans
  * avoir a raisonner sur les fuseaux.
  */
-const QUEUE_WINDOW_MS = 12 * 60 * 60 * 1000;
+/**
+ * Douze heures etaient une borne raisonnable, et une erreur.
+ *
+ * Elles enjambent minuit : a 11 h, la file contenait encore les
+ * commandes de 23 h la veille. Or les numeros repartent a 1 chaque
+ * journee de service — le caissier voyait donc deux « 42 » dans sa
+ * liste, sans aucun moyen de savoir lequel etait celui du client
+ * plante devant lui. La fenetre du service regle les deux : elle tient
+ * la journee en cours, et les six dernieres heures pour qu'une
+ * commande prise avant minuit ne disparaisse pas a minuit une.
+ */
 
 router.get('/pending-payment', requireAuth, requireRole('cashier', 'manager', 'admin', 'super_admin'), async (req, res) => {
   const orders = await Order.findAll({
     where: {
       status: 'awaiting_payment',
-      createdAt: { [Op.gte]: new Date(Date.now() - QUEUE_WINDOW_MS) },
+      ...fenetreDuService(),
     },
     include: [{ model: OrderItem, as: 'items' }],
     order: [['createdAt', 'ASC']],
@@ -532,7 +542,7 @@ router.get(
       where: {
         status: 'awaiting_payment',
         isParked: true,
-        createdAt: { [Op.gte]: new Date(Date.now() - QUEUE_WINDOW_MS) },
+        ...fenetreDuService(),
       },
       include: [{ model: OrderItem, as: 'items' }],
       order: [['updatedAt', 'DESC']],
