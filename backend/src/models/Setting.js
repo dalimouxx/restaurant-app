@@ -98,6 +98,17 @@ const DEFAULTS = {
   // Le telephone reste exige : sans lui, le restaurant n'a aucun moyen
   // de joindre quelqu'un dont la commande pose probleme.
   commandeSansCompte: 'oui',
+
+  // Ou va une commande passee en ligne ou en scannant le code de table.
+  //
+  // 'caisse'  : elle attend un encaissement, puis part en cuisine. C'est
+  //             le deroule d'un etablissement qui tient son comptoir.
+  // 'cuisine' : elle part directement en preparation, et se paie a la
+  //             remise. Sans cela, un client qui scanne le code pose sur
+  //             sa table compose sa commande pour rien : elle reste dans
+  //             une file de caisse que personne ne tient, et la cuisine
+  //             ne la voit jamais.
+  commandesEnLigne: 'caisse',
 };
 
 /** Reglages a choix ferme : une valeur inventee est refusee, pas enregistree. */
@@ -106,6 +117,7 @@ const CHOIX = {
   livraisonActive: ['oui', 'non'],
   caisseSimplifiee: ['oui', 'non'],
   commandeSansCompte: ['oui', 'non'],
+  commandesEnLigne: ['caisse', 'cuisine'],
 };
 
 /** Les horaires sont un objet, pas une ligne de texte : ils ont leur place a part. */

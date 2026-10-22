@@ -296,6 +296,9 @@ export interface Settings {
   etapesCuisine: 'deux' | 'une' | 'aucune'
   livraisonActive: 'oui' | 'non'
   caisseSimplifiee: 'oui' | 'non'
+  commandeSansCompte: 'oui' | 'non'
+  /** Où part une commande passée en ligne ou en scannant le code de table. */
+  commandesEnLigne: 'caisse' | 'cuisine'
   openingHours: Record<WeekDay, DayHours>
   opening: OpeningState
   /** L'établissement servi : logo, et repère pour le code à scanner. */

@@ -172,6 +172,23 @@ router.post(
     );
   }
 
+  /**
+   * Ou part la commande.
+   *
+   * Quand l'etablissement ne tient pas de comptoir, la faire attendre un
+   * encaissement revient a ne jamais la preparer : elle s'empile dans
+   * une file de caisse que personne ne regarde, pendant que le client
+   * attend a sa table. Elle part alors directement en preparation et se
+   * paie a la remise.
+   */
+  const reglagesService = await getSettings();
+  const directEnCuisine = reglagesService.commandesEnLigne === 'cuisine';
+  const etatInitial = directEnCuisine
+    ? reglagesService.etapesCuisine === 'aucune'
+      ? 'ready'
+      : 'in_kitchen'
+    : 'awaiting_payment';
+
   let deliveryFee = 0;
   let zone = null;
 
@@ -190,7 +207,7 @@ router.post(
     items,
     source: 'online',
     fulfillmentType,
-    status: 'awaiting_payment',
+    status: etatInitial,
     // Sans compte, la commande n'a pas de proprietaire : seuls le nom
     // et le telephone saisis la rattachent a quelqu'un.
     customerId: req.user?.id ?? null,
@@ -205,6 +222,14 @@ router.post(
     minimumOrder: zone?.minimumOrder ?? 0,
     zoneName: zone?.name,
   });
+
+  // Elle doit atteindre les ecrans qui l'attendent : sans ces signaux,
+  // la cuisine ne verrait le ticket qu'au prochain rechargement.
+  if (directEnCuisine) {
+    await deductStockForOrderItems(order.items, order.id);
+    socket.emitNewKitchenTicket(order);
+    socket.emitBoard(order);
+  }
 
   res.status(201).json(order);
   }

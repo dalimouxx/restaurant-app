@@ -5,6 +5,7 @@ import { catalog, settingsApi, zones as zonesApi } from '../lib/api'
 import { moneyDT } from '../lib/format'
 import type { Category, DeliveryZone, Product, Settings, WeekDay } from '../lib/types'
 import { Emoji, emojiPlat } from '../components/Emoji'
+import { useAuth } from '../lib/store'
 import { Wordmark } from '../components/Shell'
 import { RepriseCommande } from '../components/RepriseCommande'
 import { Skeleton } from '../components/ui'
@@ -45,6 +46,7 @@ function jourCourant(): number {
 }
 
 export default function LandingScreen() {
+  const connecte = useAuth((s) => s.user !== null)
   const [settings, setSettings] = useState<Settings | null>(null)
   const [zones, setZones] = useState<DeliveryZone[]>([])
   const [produits, setProduits] = useState<Product[]>([])
@@ -160,12 +162,22 @@ export default function LandingScreen() {
               <Emoji vie="rebondit" className="text-[20px]">🍔</Emoji>
               Commander en ligne
             </Link>
-            <Link
-              to="/mes-commandes"
-              className="reagit inline-flex h-14 items-center gap-2 rounded-[14px] border border-ink-200 bg-white px-6 text-[15px] font-bold text-ink-700 transition-colors hover:border-ink-300"
-            >
-              Mes commandes
-            </Link>
+            {/*
+              * Seul un client inscrit a un historique. L'afficher a tout
+              * le monde envoyait les autres — la majorite, maintenant que
+              * le compte est facultatif — droit sur un mur de connexion
+              * depuis le bouton principal de la page d'accueil. Ceux qui
+              * ont commande sans compte retrouvent leur suivi par le
+              * bandeau de reprise, juste au-dessus.
+              */}
+            {connecte && (
+              <Link
+                to="/mes-commandes"
+                className="reagit inline-flex h-14 items-center gap-2 rounded-[14px] border border-ink-200 bg-white px-6 text-[15px] font-bold text-ink-700 transition-colors hover:border-ink-300"
+              >
+                Mes commandes
+              </Link>
+            )}
           </div>
 
           {/* Les trois chiffres qui répondent aux vraies questions :

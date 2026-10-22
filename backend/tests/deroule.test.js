@@ -230,6 +230,57 @@ async function run() {
   check(ferme.status === 401, 'Le gerant peut exiger un compte : la commande est alors refusee')
   await regler({ commandeSansCompte: 'oui' })
 
+  /* ───────── Ou part une commande scannee a table ─────────
+     Le code pose sur les tables n'a de sens que si la commande atteint
+     la cuisine. Avec une caisse tenue, elle attend l'encaissement ;
+     sans comptoir, elle doit partir directement, sinon le client
+     compose sa commande pour rien. */
+  console.log('\n— Commande en ligne : ou part-elle —')
+
+  await regler({ commandesEnLigne: 'caisse', etapesCuisine: 'deux' })
+  const versCaisse = (await commanderSansCompte({
+    customerName: 'Table 1', customerPhone: '20111222',
+  })).data
+  check(
+    versCaisse.status === 'awaiting_payment',
+    'Avec un comptoir tenu, elle attend l\'encaissement'
+  )
+  const fileCaisse = (await req('GET', '/orders/pending-payment', null, cash)).data
+  check(
+    fileCaisse.some((o) => o.id === versCaisse.id),
+    'Et elle apparait bien dans la file du caissier'
+  )
+
+  await regler({ commandesEnLigne: 'cuisine' })
+  const versCuisine = (await commanderSansCompte({
+    customerName: 'Table 2', customerPhone: '20333444',
+  })).data
+  check(
+    versCuisine.status === 'in_kitchen',
+    'Sans comptoir, elle part directement en preparation'
+  )
+  const fileCuisine = (await req('GET', '/orders/kitchen/queue', null, mgr)).data
+  check(
+    Array.isArray(fileCuisine) && fileCuisine.some((o) => o.id === versCuisine.id),
+    'Le cuisinier la voit sur son ecran'
+  )
+  check(
+    !(await req('GET', '/orders/pending-payment', null, cash)).data
+      .some((o) => o.id === versCuisine.id),
+    'Elle n\'encombre plus une file de caisse que personne ne tient'
+  )
+
+  await regler({ commandesEnLigne: 'cuisine', etapesCuisine: 'aucune' })
+  const sansCuisine = (await commanderSansCompte({
+    customerName: 'Table 3', customerPhone: '20555666',
+  })).data
+  check(
+    sansCuisine.status === 'ready',
+    'Sans comptoir ni ecran de cuisine, elle est prete tout de suite'
+  )
+
+  await regler({ commandesEnLigne: 'caisse', etapesCuisine: 'deux' })
+
   console.log(`\n===== ${pass} reussis, ${fail} echecs =====\n`)
   process.exit(fail > 0 ? 1 : 0)
 }

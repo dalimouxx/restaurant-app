@@ -8,6 +8,7 @@ import type { Category, Product } from '../../lib/types'
 import { Button, EmptyState, Skeleton, useToast } from '../../components/ui'
 import { Wordmark } from '../../components/Shell'
 import { Emoji, emojiPlat, emojiPour } from '../../components/Emoji'
+import { useReglages } from '../../lib/reglages'
 import { LineOptions, OptionPicker } from '../../components/OptionPicker'
 
 type Stage = 'ordering' | 'done'
@@ -24,6 +25,8 @@ export default function KioskScreen() {
   const [picking, setPicking] = useState<Product | null>(null)
 
   const cart = useKioskCart()
+  const { reglages } = useReglages()
+  const versCaisse = (reglages?.commandesEnLigne ?? 'caisse') === 'caisse'
   const { notify } = useToast()
 
   const load = useCallback(async () => {
@@ -76,7 +79,13 @@ export default function KioskScreen() {
   }
 
   if (stage === 'done' && placedNumber !== null) {
-    return <KioskDone number={placedNumber} onRestart={() => setStage('ordering')} />
+    return (
+      <KioskDone
+        number={placedNumber}
+        versCaisse={versCaisse}
+        onRestart={() => setStage('ordering')}
+      />
+    )
   }
 
   return (
@@ -90,7 +99,8 @@ export default function KioskScreen() {
             <Emoji vie="rebondit" className="text-[34px] sm:text-[42px]">🍔</Emoji>
           </h1>
           <p className="mt-1.5 text-[15px] text-ink-500">
-            Touchez un plat pour l'ajouter. Vous paierez en caisse.
+            Touchez un plat pour l'ajouter.{' '}
+            {versCaisse ? 'Vous paierez en caisse.' : 'Vous paierez à la remise.'}
           </p>
         </header>
 
@@ -352,7 +362,15 @@ function ProductTile({
   )
 }
 
-function KioskDone({ number, onRestart }: { number: number; onRestart: () => void }) {
+function KioskDone({
+  number,
+  versCaisse,
+  onRestart,
+}: {
+  number: number
+  versCaisse: boolean
+  onRestart: () => void
+}) {
   const [left, setLeft] = useState(15)
 
   useEffect(() => {
@@ -375,7 +393,9 @@ function KioskDone({ number, onRestart }: { number: number; onRestart: () => voi
         Commande enregistrée
       </p>
       <p className="anim-monte mt-2 max-w-md text-[26px] leading-tight font-bold text-white sm:text-[32px]">
-        Présentez ce numéro en caisse
+        {/* Promettre un comptoir qui n'est pas tenu envoie le client
+            attendre devant une caisse vide. */}
+        {versCaisse ? 'Présentez ce numéro en caisse' : 'Gardez ce numéro'}
       </p>
 
       <div className="anim-surgit mt-10 rounded-[26px] bg-white px-14 py-8 shadow-[0_24px_60px_-20px_rgba(11,107,91,0.6)]">
@@ -385,7 +405,9 @@ function KioskDone({ number, onRestart }: { number: number; onRestart: () => voi
       </div>
 
       <p className="mt-10 text-[14px] text-ink-500">
-        Votre préparation démarre dès le paiement.
+        {versCaisse
+          ? 'Votre préparation démarre dès le paiement.'
+          : 'Votre préparation a déjà commencé.'}
       </p>
 
       <button

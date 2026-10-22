@@ -1,4 +1,4 @@
-import { Bike, ChefHat, Wallet } from 'lucide-react'
+import { Bike, ChefHat, Smartphone, Wallet } from 'lucide-react'
 import type { Settings } from '../../lib/types'
 import { Button, Card, SectionTitle } from '../../components/ui'
 
@@ -165,6 +165,24 @@ export function ServiceCard({
             actifTexte="Complète — session et moyens de paiement"
             inactifTexte="Un seul geste — sans caissier"
           />
+        </div>
+
+        <div>
+          <p className="mb-2.5 flex items-center gap-2 text-[13.5px] font-bold text-ink-900">
+            <Smartphone size={15} className="text-ink-400" />
+            Commandes en ligne et code de table
+          </p>
+          <Interrupteur
+            actif={form.commandesEnLigne === 'caisse'}
+            onChange={(v) => onChange({ commandesEnLigne: v ? 'caisse' : 'cuisine' })}
+            actifTexte="Passent par la caisse"
+            inactifTexte="Vont directement en cuisine"
+          />
+          <p className="mt-2 text-[12.5px] leading-snug text-ink-500">
+            {form.commandesEnLigne === 'caisse'
+              ? "Le client paie au comptoir, puis la commande part en préparation. Si personne ne tient la caisse, elle n'arrivera jamais en cuisine."
+              : "La préparation démarre tout de suite et le client paie à la remise. C'est ce qu'il faut pour le code à scanner posé sur les tables."}
+          </p>
         </div>
 
         <div className="flex items-center justify-between gap-3 border-t border-ink-100 pt-4">
