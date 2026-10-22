@@ -42,6 +42,31 @@ function businessDay(date = new Date()) {
  * (journee, numero) rend cela impossible, et l'appelant retente si deux
  * commandes se croisent.
  */
+/**
+ * Ce qui doit rester a l'ecran du service en cours.
+ *
+ * Les numeros repartent a 1 chaque jour. Sans borne de date, un ticket
+ * jamais termine la veille — une commande abandonnee, un plat que
+ * personne n'a decoche a la fermeture — reste affiche indefiniment et
+ * finit par porter le meme numero qu'un ticket du jour. Un cuisinier
+ * voit alors deux « 107 » cote a cote, et il n'a aucun moyen de savoir
+ * lequel est le sien.
+ *
+ * On garde la journee de service en cours, plus tout ce qui a ete pris
+ * dans les six dernieres heures : une commande passee a 23 h 50 doit
+ * rester visible apres minuit, alors que sa journee de service, elle,
+ * a change.
+ */
+function fenetreDuService() {
+  const ilYASixHeures = new Date(Date.now() - 6 * 60 * 60 * 1000);
+  return {
+    [Op.or]: [
+      { orderDate: businessDay() },
+      { createdAt: { [Op.gte]: ilYASixHeures } },
+    ],
+  };
+}
+
 async function getNextOrderNumber(orderDate) {
   // Le filtre est explicite : une agregation ne passe pas par les
   // crochets de cloisonnement, et sans lui le numero reprendrait au
@@ -478,7 +503,10 @@ router.get('/board', async (req, res) => {
    * c'est-a-dire exactement l'inverse de ce que le client cherche.
    */
   const orders = await Order.findAll({
-    where: { status: ['in_kitchen', 'preparing', 'ready'], orderDate: businessDay() },
+    where: {
+      status: ['in_kitchen', 'preparing', 'ready'],
+      ...fenetreDuService(),
+    },
     attributes: ['orderNumber', 'status', 'updatedAt'],
     order: [['updatedAt', 'DESC']],
     limit: 40,
@@ -791,7 +819,10 @@ router.get(
 // --- Cuisine : liste des commandes actives (en cours de preparation) ---
 router.get('/kitchen/queue', requireAuth, requireRole('cook', 'manager', 'admin', 'super_admin'), async (req, res) => {
   const orders = await Order.findAll({
-    where: { status: ['in_kitchen', 'preparing', 'ready'] },
+    where: {
+      status: ['in_kitchen', 'preparing', 'ready'],
+      ...fenetreDuService(),
+    },
     include: [{ model: OrderItem, as: 'items' }],
     order: [['createdAt', 'ASC']],
   });
