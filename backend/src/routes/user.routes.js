@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const { User } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { restaurantCourant, avecRestaurant } = require('../tenant');
 
 const router = express.Router();
 
@@ -28,6 +29,25 @@ router.post('/', requireAuth, requireRole('manager', 'admin', 'super_admin'), as
   const allowedRoles = ['manager', 'cashier', 'cook', 'driver'];
   if (!allowedRoles.includes(role)) {
     return res.status(400).json({ error: 'Role invalide.' });
+  }
+
+  /**
+   * Un employe appartient toujours a un etablissement.
+   *
+   * C'est ce rattachement qui decide des ventes qu'il voit, de la caisse
+   * qu'il cloture et de la cuisine qui lui repond. Un compte cree sans
+   * lui n'est pas un compte incomplet, c'est un compte qui ne peut rien
+   * faire — et le refus serait incomprehensible pour l'interesse au
+   * moment de sa premiere connexion.
+   *
+   * Un gerant cree dans le sien. Un super admin, qui travaille sur
+   * l'installation entiere, doit dire lequel.
+   */
+  const etablissement = restaurantCourant() || req.body.restaurantId || null;
+  if (!etablissement) {
+    return res.status(400).json({
+      error: 'Indiquez l\'etablissement auquel rattacher cet employe.',
+    });
   }
   // Seul un super_admin peut creer un autre manager.
   if (role === 'manager' && req.user.role !== 'super_admin' && req.user.role !== 'admin') {
@@ -54,9 +74,12 @@ router.post('/', requireAuth, requireRole('manager', 'admin', 'super_admin'), as
     }
   }
 
+  // Inscrit explicitement : un super admin travaille hors cloisonnement,
+  // ou le rattachement automatique ne s'applique pas.
   const user = await User.create({
     fullName,
     role,
+    restaurantId: etablissement,
     phone: phone || null,
     email: email || null,
     passwordHash: password ? await bcrypt.hash(password, 12) : null,

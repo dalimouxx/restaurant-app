@@ -20,6 +20,8 @@ const { sequelize } = require('./models');
 const socket = require('./sockets/socketHandler');
 const { bootstrapAdmin, bootstrapDemoMenu, bootstrapDeliveryZone } = require('./bootstrap');
 const { runMigrations } = require('./migrations');
+const { surToutelInstallation, avecRestaurant } = require('./tenant');
+const { Restaurant } = require('./models/Restaurant');
 
 const authRoutes = require('./routes/auth.routes');
 const { router: productRoutes } = require('./routes/product.routes');
@@ -30,6 +32,8 @@ const deliveryRoutes = require('./routes/delivery.routes');
 const reportRoutes = require('./routes/report.routes');
 const userRoutes = require('./routes/user.routes');
 const settingsRoutes = require('./routes/settings.routes');
+const { resoudreRestaurantPublic } = require('./middleware/restaurantPublic');
+const restaurantRoutes = require('./routes/restaurant.routes');
 const zoneRoutes = require('./routes/zone.routes');
 
 const app = express();
@@ -211,7 +215,21 @@ app.get('/health', async (req, res) => {
   });
 });
 
+/**
+ * Tout ce qui est en dessous appartient a un etablissement.
+ *
+ * Les routes avec session prennent le leur dans le jeton ; celles sans
+ * session — borne, ecran de salle, carte en ligne — le resolvent ici.
+ * Il est pose avant les routes et non dans chacune d'elles : une route
+ * ou on l'aurait oublie ne planterait pas, elle servirait les donnees
+ * de tous les restaurants melangees.
+ *
+ * L'authentification ne peut pas en dependre : on ne sait pas encore
+ * qui se connecte, donc pas ou il travaille.
+ */
 app.use('/api/auth', authRoutes);
+app.use('/api', resoudreRestaurantPublic({ exiger: false }));
+
 app.use('/api/products', productRoutes);
 app.use('/api/stock', stockRoutes);
 app.use('/api/orders', orderRoutes);
@@ -221,6 +239,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/zones', zoneRoutes);
+app.use('/api/restaurants', restaurantRoutes);
 
 /**
  * Application web (build Vite).
@@ -352,8 +371,31 @@ async function start() {
     // types elargis. Voir migrations.js pour la regle d'ecriture.
     await runMigrations();
 
-    // Premier demarrage : cree le compte administrateur si la base est vide.
-    const boot = await bootstrapAdmin();
+    /**
+     * L'amorcage regarde l'installation entiere, et c'est declare.
+     *
+     * Il s'execute avant toute requete : il n'y a pas de session, donc
+     * pas d'etablissement courant. Sans cette declaration, le
+     * cloisonnement refuse la lecture — et c'est bien ce qu'on veut
+     * ailleurs. Ici, l'amorcage rattache lui-meme ce qu'il cree a
+     * l'etablissement d'origine.
+     */
+    const restaurantInitial = await surToutelInstallation(() =>
+      Restaurant.findOne({ order: [['createdAt', 'ASC']] })
+    );
+
+    // L'amorcage s'execute AU NOM de cet etablissement, et non sur
+    // l'installation entiere : ainsi tout ce qu'il cree — le compte
+    // administrateur, la zone de livraison, la carte de demonstration —
+    // lui est rattache sans qu'aucune de ces fonctions n'ait a s'en
+    // occuper. Les migrations ont deja garanti qu'il existe.
+    const amorcage = await avecRestaurant(restaurantInitial.id, async () => {
+      const boot = await bootstrapAdmin();
+      const zone = await bootstrapDeliveryZone();
+      const demo = await bootstrapDemoMenu();
+      return { boot, zone, demo };
+    });
+    const boot = amorcage.boot;
     if (boot.created) {
       console.log(`Compte administrateur cree : ${boot.email}`);
     } else if (boot.reason !== 'des comptes existent déjà') {
@@ -368,11 +410,11 @@ async function start() {
     }
 
     // Reprend l'ancien tarif unique si aucune zone n'existe encore.
-    const zone = await bootstrapDeliveryZone();
+    const zone = amorcage.zone;
     if (zone.created) console.log('Zone de livraison par defaut creee (7 DT).');
 
     // Carte de démonstration, si demandée et si la carte est vide.
-    const demo = await bootstrapDemoMenu();
+    const demo = amorcage.demo;
     if (demo.created) {
       console.log(
         `Carte de demonstration creee : ${demo.products} produits, ` +

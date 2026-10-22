@@ -1,4 +1,5 @@
 const express = require('express');
+const { filtreEtablissement } = require('../tenant');
 const {
   Product,
   Category,
@@ -158,7 +159,8 @@ router.get('/:id/options', async (req, res) => {
 router.post('/categories', requireAuth, requireRole(...MANAGER), async (req, res) => {
   try {
     const name = cleanName(req.body.name, 'Nom de la categorie');
-    const last = await Category.max('displayOrder');
+    // Agregation : le cloisonnement ne s'y applique pas tout seul.
+    const last = await Category.max('displayOrder', { where: filtreEtablissement() });
     const category = await Category.create({
       name,
       displayOrder: Number.isFinite(last) ? last + 1 : 0,
@@ -236,7 +238,9 @@ router.post('/', requireAuth, requireRole(...MANAGER), async (req, res) => {
     const category = await Category.findByPk(categoryId);
     if (!category) return res.status(400).json({ error: 'Categorie inconnue.' });
 
-    const last = await Product.max('displayOrder', { where: { categoryId } });
+    const last = await Product.max('displayOrder', {
+      where: { categoryId, ...filtreEtablissement() },
+    });
     const product = await Product.create({
       name: cleanName(req.body.name, 'Nom du plat'),
       price: cleanPrice(req.body.price),

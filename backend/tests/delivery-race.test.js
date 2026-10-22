@@ -10,7 +10,13 @@ const BASE = 'http://localhost:4000/api';
 async function req(method, path, body, token) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      // Comme une borne configuree sur le terrain : sans session, c'est
+      // le seul moyen de dire de quel etablissement on depend.
+      'X-Restaurant': 'principal',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   let data = null;
@@ -41,7 +47,17 @@ async function run() {
   const d1 = await req('POST', '/auth/register-customer', { fullName: 'Livreur A', phone: '70' + suffix.toString().slice(-6) });
   const d2 = await req('POST', '/auth/register-customer', { fullName: 'Livreur B', phone: '71' + suffix.toString().slice(-6) });
 
-  await db.query(`UPDATE users SET role = 'driver' WHERE id = $1 OR id = $2`, [d1.data.user.id, d2.data.user.id]);
+  // Un employe appartient toujours a un etablissement — c'est ce qui
+  // cloisonne les donnees entre les fastfoods d'une meme installation.
+  // Promouvoir un compte client en livreur sans le rattacher laisserait
+  // un employe sans restaurant, etat que le serveur refuse desormais.
+  const { rows: [etablissement] } = await db.query(
+    `SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1`
+  );
+  await db.query(
+    `UPDATE users SET role = 'driver', "restaurantId" = $3 WHERE id = $1 OR id = $2`,
+    [d1.data.user.id, d2.data.user.id, etablissement.id]
+  );
 
   // Les tokens JWT contiennent deja le role au moment de leur emission (avant la mise a jour SQL),
   // donc on se reconnecte pour obtenir un token a jour avec le role "driver".
@@ -52,8 +68,13 @@ async function run() {
   // en reutilisant le meme secret que le serveur (charge depuis le meme .env).
   require('dotenv').config({ path: __dirname + '/../.env' });
   const jwt = require('jsonwebtoken');
-  const driver1Token = jwt.sign({ id: d1.data.user.id, role: 'driver', fullName: 'Livreur A' }, process.env.JWT_SECRET, { expiresIn: '1h' });
-  const driver2Token = jwt.sign({ id: d2.data.user.id, role: 'driver', fullName: 'Livreur B' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+  const signer = (id, nom) => jwt.sign(
+    { id, role: 'driver', fullName: nom, restaurantId: etablissement.id },
+    process.env.JWT_SECRET,
+    { expiresIn: '1h' }
+  );
+  const driver1Token = signer(d1.data.user.id, 'Livreur A');
+  const driver2Token = signer(d2.data.user.id, 'Livreur B');
 
   // 3. Creer une commande en ligne avec livraison, la payer, et la faire passer "ready"
 

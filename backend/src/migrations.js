@@ -101,7 +101,109 @@ const STATEMENTS = [
   // finalement pas ete consomme, sans confondre avec une correction a la main.
   `ALTER TYPE "enum_stock_movements_type"
      ADD VALUE IF NOT EXISTS 'cancellation'`,
+
+  /* ─────────────── Plusieurs restaurants dans une installation ───────────────
+   *
+   * Chaque table porte desormais son etablissement. La reprise se fait en
+   * trois temps, et dans cet ordre : creer un etablissement pour ce qui
+   * existe deja, rattacher toutes les lignes orphelines, puis seulement
+   * imposer la colonne. Inverser reviendrait a refuser de demarrer sur
+   * une base existante.
+   *
+   * Les reglages changent de cle primaire : « restaurantName » n'est plus
+   * unique dans l'installation, il l'est par restaurant. */
+
+  `CREATE TABLE IF NOT EXISTS restaurants (
+     id UUID PRIMARY KEY,
+     name VARCHAR(255) NOT NULL,
+     slug VARCHAR(255) NOT NULL UNIQUE,
+     "logoUrl" TEXT,
+     "isActive" BOOLEAN NOT NULL DEFAULT true,
+     notes VARCHAR(255),
+     "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+     "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+   )`,
+
+  // L'etablissement d'origine, celui qui tournait avant la bascule. Son
+  // repere est fixe pour que les bornes deja posees continuent de
+  // repondre a la meme adresse.
+  // Les dates sont posees explicitement : la table peut avoir ete creee
+  // par sequelize.sync(), qui ne leur donne pas de valeur par defaut.
+  `INSERT INTO restaurants (id, name, slug, "isActive", "createdAt", "updatedAt")
+     SELECT '00000000-0000-4000-8000-000000000001', 'Mon restaurant', 'principal',
+            true, now(), now()
+     WHERE NOT EXISTS (SELECT 1 FROM restaurants)`,
+
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE users SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS users_restaurant ON users ("restaurantId")`,
+  `ALTER TABLE categories ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE categories SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS categories_restaurant ON categories ("restaurantId")`,
+  `ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE ingredients SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS ingredients_restaurant ON ingredients ("restaurantId")`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE products SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS products_restaurant ON products ("restaurantId")`,
+  `ALTER TABLE product_ingredients ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE product_ingredients SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS product_ingredients_restaurant ON product_ingredients ("restaurantId")`,
+  `ALTER TABLE product_options ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE product_options SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS product_options_restaurant ON product_options ("restaurantId")`,
+  `ALTER TABLE orders ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE orders SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS orders_restaurant ON orders ("restaurantId")`,
+  `ALTER TABLE order_items ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE order_items SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS order_items_restaurant ON order_items ("restaurantId")`,
+  `ALTER TABLE cash_sessions ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE cash_sessions SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS cash_sessions_restaurant ON cash_sessions ("restaurantId")`,
+  `ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE stock_movements SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS stock_movements_restaurant ON stock_movements ("restaurantId")`,
+  `ALTER TABLE driver_locations ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE driver_locations SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS driver_locations_restaurant ON driver_locations ("restaurantId")`,
+  `ALTER TABLE settings ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE settings SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS settings_restaurant ON settings ("restaurantId")`,
+  `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE audit_logs SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS audit_logs_restaurant ON audit_logs ("restaurantId")`,
+  `ALTER TABLE delivery_zones ADD COLUMN IF NOT EXISTS "restaurantId" UUID`,
+  `UPDATE delivery_zones SET "restaurantId" = (SELECT id FROM restaurants ORDER BY "createdAt" LIMIT 1)
+     WHERE "restaurantId" IS NULL`,
+  `CREATE INDEX IF NOT EXISTS delivery_zones_restaurant ON delivery_zones ("restaurantId")`,
+
+  // Les reglages : la cle seule ne suffit plus, deux restaurants ont
+  // chacun leur « restaurantName ».
+  `ALTER TABLE settings DROP CONSTRAINT IF EXISTS settings_pkey`,
+  `ALTER TABLE settings ADD PRIMARY KEY ("restaurantId", key)`,
+
+  // Le numero de commande repart a 1 chaque jour, et par etablissement :
+  // deux fastfoods servent chacun leur numero 12 le meme midi.
+  `DROP INDEX IF EXISTS orders_daily_number`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS orders_daily_number
+     ON orders ("restaurantId", "orderDate", "orderNumber")
+     WHERE "orderDate" >= DATE '2026-10-19'`,
 ];
+
 
 async function runMigrations() {
   for (const [index, sql] of STATEMENTS.entries()) {

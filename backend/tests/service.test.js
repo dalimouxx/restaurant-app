@@ -18,6 +18,11 @@ async function req(method, path, body, token) {
     method,
     headers: {
       'Content-Type': 'application/json',
+    'X-Restaurant': 'principal',
+      // Une borne, un ecran de salle ou un site nomment l'etablissement
+      // dont ils dependent : sans session, rien d'autre ne le dit, et une
+      // installation qui heberge plusieurs fastfoods refuse de deviner.
+      'X-Restaurant': 'principal',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,

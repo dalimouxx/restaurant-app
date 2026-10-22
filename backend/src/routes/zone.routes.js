@@ -1,4 +1,5 @@
 const express = require('express');
+const { filtreEtablissement } = require('../tenant');
 const { DeliveryZone } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { HttpError } = require('../errors');
@@ -53,7 +54,8 @@ router.get('/all', requireAuth, requireRole(...MANAGER), async (req, res) => {
 
 router.post('/', requireAuth, requireRole(...MANAGER), async (req, res) => {
   try {
-    const last = await DeliveryZone.max('displayOrder');
+    // Agregation : le cloisonnement ne s'y applique pas tout seul.
+    const last = await DeliveryZone.max('displayOrder', { where: filtreEtablissement() });
     const zone = await DeliveryZone.create({
       ...cleanZone(req.body),
       displayOrder: Number.isFinite(last) ? last + 1 : 0,

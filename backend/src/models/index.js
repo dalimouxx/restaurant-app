@@ -14,6 +14,34 @@ const DriverLocation = require('./DriverLocation');
 const { Setting } = require('./Setting');
 const AuditLog = require('./AuditLog');
 const DeliveryZone = require('./DeliveryZone');
+const { Restaurant, slugifier } = require('./Restaurant');
+const { cloisonner } = require('../tenant');
+
+/**
+ * Cloisonnement par etablissement.
+ *
+ * Chacun de ces modeles ne voit que les donnees de son restaurant, et
+ * le filtre est pose dans l'ORM plutot que dans chaque requete : une
+ * requete ou on l'aurait oublie ne planterait pas, elle montrerait les
+ * ventes du voisin. Restaurant lui-meme n'y figure pas — c'est lui qui
+ * definit les cloisons.
+ */
+[
+  Category, Ingredient, Product, ProductIngredient, ProductOption,
+  Order, OrderItem, CashSession, StockMovement, DriverLocation,
+  AuditLog, DeliveryZone,
+].forEach((m) => cloisonner(m));
+
+// Les comptes clients n'appartiennent a aucun etablissement : dans une
+// chaine, la meme personne commande chez plusieurs fastfoods. Les
+// employes, eux, ont toujours le leur.
+cloisonner(User, { partage: true });
+
+// Les reglages sont identifies par leur cle ET leur etablissement.
+cloisonner(Setting, { clePrimaire: true });
+
+Restaurant.hasMany(Order, { foreignKey: 'restaurantId' });
+Order.belongsTo(Restaurant, { foreignKey: 'restaurantId' });
 
 // --- Associations ---
 
@@ -49,6 +77,8 @@ DriverLocation.belongsTo(User, { foreignKey: 'driverId' });
 
 module.exports = {
   sequelize,
+  Restaurant,
+  slugifier,
   User,
   Category,
   Ingredient,

@@ -1,10 +1,19 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { surToutelInstallation } = require('../tenant');
 const { User } = require('../models');
 const { guard, recordFailure, recordSuccess, throttle } = require('../middleware/rateLimit');
 
 const router = express.Router();
+
+/**
+ * L'authentification precede l'etablissement : au moment ou quelqu'un
+ * saisit son code, on ne sait pas encore ou il travaille. Ces routes
+ * cherchent donc dans toute l'installation — c'est le seul endroit du
+ * serveur ou c'est legitime, et c'est ecrit noir sur blanc.
+ */
+router.use((req, res, next) => surToutelInstallation(next));
 
 /**
  * Toutes les voies d'entree partagent un meme compteur d'echecs : sans
@@ -13,9 +22,21 @@ const router = express.Router();
  */
 const LOGIN = 'connexion';
 
+/**
+ * Le jeton porte l'etablissement.
+ *
+ * C'est lui, et non un en-tete envoye par le navigateur, qui decide
+ * quelles donnees la session verra : il est signe a la connexion, et
+ * rien du cote client ne peut le deplacer vers un autre restaurant.
+ */
 function generateToken(user) {
   return jwt.sign(
-    { id: user.id, role: user.role, fullName: user.fullName },
+    {
+      id: user.id,
+      role: user.role,
+      fullName: user.fullName,
+      restaurantId: user.restaurantId || null,
+    },
     process.env.JWT_SECRET,
     { expiresIn: process.env.JWT_EXPIRES_IN || '12h' }
   );

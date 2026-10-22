@@ -18,7 +18,13 @@ function check(cond, msg) {
 async function req(method, path, body, token) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    headers: {
+      'Content-Type': 'application/json',
+      // Comme une borne configuree sur le terrain : sans session, c'est
+      // le seul moyen de dire de quel etablissement on depend.
+      'X-Restaurant': 'principal',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: body ? JSON.stringify(body) : undefined,
   });
   let data = null;
@@ -44,9 +50,12 @@ async function run() {
 
   // Creation d'un livreur via l'API de gestion des employes
   const suffix = Date.now().toString().slice(-6);
+  // Le gerant, et non le super admin : c'est ce que dit le controle
+  // juste en dessous, et c'est le geste reel. Un super admin travaille
+  // sur l'installation entiere ; il doit nommer l'etablissement.
   const driverRes = await req('POST', '/users', {
     fullName: 'Livreur E2E', role: 'driver', phone: '60' + suffix,
-  }, adminToken);
+  }, managerToken);
   check(driverRes.status === 201, 'Le manager peut creer un compte livreur');
 
   const driverQr = driverRes.data.qrToken;
@@ -110,7 +119,10 @@ async function run() {
 
   // --- Etape 5 : le livreur la voit et l'accepte ---
   const available = await req('GET', '/delivery/available', null, driverToken);
-  check(available.data.some((o) => o.id === orderId), 'La livraison apparait chez le livreur');
+  check(
+    Array.isArray(available.data) && available.data.some((o) => o.id === orderId),
+    'La livraison apparait chez le livreur'
+  );
 
   const accepted = await req('POST', `/delivery/${orderId}/accept`, {}, driverToken);
   check(accepted.status === 200 && accepted.data.status === 'out_for_delivery',

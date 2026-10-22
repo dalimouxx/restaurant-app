@@ -1,4 +1,5 @@
 const express = require('express');
+const { filtreEtablissement } = require('../tenant');
 const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
 const { Order, OrderItem, Product, ProductOption, DeliveryZone } = require('../models');
@@ -42,7 +43,12 @@ function businessDay(date = new Date()) {
  * commandes se croisent.
  */
 async function getNextOrderNumber(orderDate) {
-  const highest = await Order.max('orderNumber', { where: { orderDate } });
+  // Le filtre est explicite : une agregation ne passe pas par les
+  // crochets de cloisonnement, et sans lui le numero reprendrait au
+  // compteur du restaurant voisin au lieu de repartir a 1.
+  const highest = await Order.max('orderNumber', {
+    where: { orderDate, ...filtreEtablissement() },
+  });
   return Number.isFinite(highest) ? highest + 1 : 1;
 }
 

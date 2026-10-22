@@ -18,6 +18,26 @@ const Setting = sequelize.define('Setting', {
 
 const { DEFAULT_HOURS, normalizeHours, openingState } = require('../openingHours');
 const { badRequest } = require('../errors');
+const { restaurantCourant } = require('../tenant');
+
+/**
+ * L'etablissement auquel ce reglage appartient.
+ *
+ * Il est inscrit explicitement, et non par un crochet comme pour les
+ * autres modeles : `upsert` construit sa requete avant que les crochets
+ * ne s'executent, si bien qu'y modifier les valeurs n'a aucun effet.
+ * Mieux vaut une ligne visible qu'un crochet qui semble proteger et ne
+ * protege pas.
+ */
+function etablissement() {
+  const id = restaurantCourant();
+  if (!id) {
+    throw badRequest(
+      'Aucun etablissement designe : choisissez le restaurant a configurer.'
+    );
+  }
+  return id;
+}
 
 /** Valeurs de depart, utilisees tant que rien n'a ete saisi. */
 const DEFAULTS = {
@@ -106,7 +126,11 @@ async function saveSettings(patch) {
   for (const [key, value] of Object.entries(patch || {})) {
     if (key in JSON_KEYS) {
       const serialized = JSON.stringify(normalizeHours(value));
-      await Setting.upsert({ key, value: serialized.slice(0, JSON_KEYS[key].maxLength) });
+      await Setting.upsert({
+        restaurantId: etablissement(),
+        key,
+        value: serialized.slice(0, JSON_KEYS[key].maxLength),
+      });
       continue;
     }
     if (!allowed.includes(key)) continue;
@@ -119,7 +143,11 @@ async function saveSettings(patch) {
       );
     }
 
-    await Setting.upsert({ key, value: String(value ?? '').slice(0, MAX_TEXT) });
+    await Setting.upsert({
+      restaurantId: etablissement(),
+      key,
+      value: String(value ?? '').slice(0, MAX_TEXT),
+    });
   }
   return getSettings();
 }
