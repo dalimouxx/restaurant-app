@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Bike,
-  Check,
   Navigation,
   PackageCheck,
   QrCode,
@@ -13,6 +12,7 @@ import { emitDriverLocation, joinRoom, on } from '../../lib/socket'
 import { useAuth } from '../../lib/store'
 import { elapsed, haversineKm, money, moneyDT, orderNo } from '../../lib/format'
 import { DeliveryMap } from '../../components/DeliveryMap'
+import { Emoji } from '../../components/Emoji'
 import type { DriverStats, Order } from '../../lib/types'
 import {
   Button,
@@ -344,11 +344,16 @@ function ActiveDelivery({
     return (
       <div className="dark-surface grid min-h-dvh place-items-center bg-ink-900 px-6 text-center">
         <div>
-          <div className="mx-auto grid size-16 place-items-center rounded-full bg-petrol-600">
-            <Check size={30} strokeWidth={3} className="text-white" />
+          {/* Une course livree arrive quelques fois par service : c'est
+              le seul endroit de l'ecran du livreur ou un peu de plaisir
+              a sa place. Entre deux feux rouges, il n'a besoin que de
+              l'adresse et du montant. */}
+          <div className="mx-auto flex justify-center gap-2">
+            <Emoji vie="rebondit" className="text-[38px]">🛵</Emoji>
+            <Emoji vie="rebondit" retard={180} className="text-[38px]">✅</Emoji>
           </div>
-          <p className="mt-5 text-[22px] font-bold text-white">Course terminée</p>
-          <p className="num mt-2 text-[17px] font-bold text-petrol-400">
+          <p className="anim-monte mt-5 text-[22px] font-bold text-white">Course terminée</p>
+          <p className="anim-surgit num mt-2 text-[17px] font-bold text-petrol-400">
             + {moneyDT(share)} pour vous
           </p>
           <Button size="lg" className="mt-8" onClick={onDone}>

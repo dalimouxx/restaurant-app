@@ -61,7 +61,7 @@ export default function LoginScreen({
         <div className="w-full max-w-[380px]">
           <Wordmark />
 
-          <h1 className="mt-8 text-[26px] leading-tight font-extrabold tracking-[-0.02em] text-white">
+          <h1 className="anim-monte mt-8 text-[26px] leading-tight font-extrabold tracking-[-0.02em] text-white">
             {intent === 'cashier'
               ? 'Poste de caisse'
               : intent === 'kitchen'
@@ -185,7 +185,7 @@ function CodePad({ onDone }: { onDone: (code: string) => Promise<void> }) {
           <span className="text-[14px] text-ink-500">Code</span>
         ) : (
           Array.from(code).map((_, i) => (
-            <span key={i} className="size-2.5 rounded-full bg-petrol-400" />
+            <span key={i} className="anim-surgit size-2.5 rounded-full bg-petrol-400" />
           ))
         )}
       </div>
@@ -232,7 +232,7 @@ function PadKey({
   return (
     <button
       onClick={onClick}
-      className={`num grid h-14 place-items-center rounded-[11px] border border-ink-700 text-[20px] font-semibold transition-colors active:bg-ink-700 ${
+      className={`reagit-fort num grid h-14 place-items-center rounded-[13px] border border-ink-700 text-[20px] font-semibold transition-colors active:bg-ink-700 ${
         muted ? 'text-ink-400 hover:bg-ink-800' : 'bg-ink-800 text-white hover:bg-ink-700'
       }`}
     >

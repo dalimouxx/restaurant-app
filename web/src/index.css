@@ -500,3 +500,25 @@
     transform: none;
   }
 }
+
+@layer utilities {
+  /* La fenetre arrive du bas sur telephone et se pose au centre sur
+     grand ecran. Elle repart par le meme chemin : une entree par la
+     droite suivie d'une sortie par le bas se lit comme deux objets
+     differents. */
+  @keyframes panneau {
+    from { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.985); }
+    to   { opacity: 1; transform: none; }
+  }
+  .anim-panneau { animation: panneau 240ms var(--ease-tiroir) both; }
+
+  @keyframes voile {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .anim-voile { animation: voile 200ms ease-out both; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-panneau { animation: voile 180ms ease both !important; }
+}

@@ -16,9 +16,15 @@ type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'dark'
 type ButtonSize = 'sm' | 'md' | 'lg' | 'xl'
 
 const buttonBase =
-  'inline-flex items-center justify-center gap-2 font-semibold rounded-[9px] ' +
-  'transition-[background-color,border-color,color,opacity] duration-150 ' +
-  'disabled:opacity-45 disabled:cursor-not-allowed select-none whitespace-nowrap'
+  'inline-flex items-center justify-center gap-2 font-semibold rounded-[11px] ' +
+  // Le retour est sur l'appui et non au relachement : attendre le
+  // relachement est precisement ce qui fait paraitre un ecran mort.
+  // `transform` est la seule propriete ajoutee ici, et c'est voulu : elle
+  // ne coute ni mise en page ni dessin.
+  'transition-[background-color,border-color,color,opacity,transform] duration-150 ' +
+  'ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.97] ' +
+  'disabled:opacity-45 disabled:cursor-not-allowed disabled:active:scale-100 ' +
+  'select-none whitespace-nowrap'
 
 const buttonVariants: Record<ButtonVariant, string> = {
   primary: 'bg-petrol-600 text-white hover:bg-petrol-700 active:bg-petrol-800',
@@ -33,7 +39,7 @@ const buttonSizes: Record<ButtonSize, string> = {
   sm: 'h-8 px-3 text-[13px]',
   md: 'h-10 px-4 text-sm',
   lg: 'h-12 px-5 text-[15px]',
-  xl: 'h-16 px-7 text-lg rounded-[13px]',
+  xl: 'h-16 px-7 text-lg rounded-[15px]',
 }
 
 export function Button({
@@ -192,7 +198,7 @@ export function Card({
   return (
     <div
       {...rest}
-      className={`rounded-[13px] border border-ink-200 bg-white ${className}`}
+      className={`rounded-[16px] border border-ink-200 bg-white shadow-[0_1px_2px_rgba(16,20,24,0.04),0_8px_24px_-16px_rgba(16,20,24,0.18)] ${className}`}
     >
       {children}
     </div>
@@ -304,13 +310,13 @@ export function Modal({
       <button
         aria-label="Fermer"
         onClick={onClose}
-        className="absolute inset-0 bg-ink-950/45 backdrop-blur-[2px]"
+        className="anim-voile absolute inset-0 bg-ink-950/45 backdrop-blur-[3px]"
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative z-10 w-full ${width} animate-ticket-in rounded-t-[18px] border border-ink-200 bg-white shadow-xl sm:rounded-[18px]`}
+        className={`relative z-10 w-full ${width} anim-panneau rounded-t-[22px] border border-ink-200 bg-white shadow-[0_32px_80px_-24px_rgba(16,20,24,0.45)] sm:rounded-[22px]`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-ink-100 px-5 py-4">
           <div>
@@ -320,7 +326,7 @@ export function Modal({
           <button
             onClick={onClose}
             aria-label="Fermer"
-            className="-m-1 rounded-md p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
+            className="reagit-fort -m-1 rounded-md p-1 text-ink-400 transition-colors hover:bg-ink-100 hover:text-ink-700"
           >
             <X size={18} />
           </button>

@@ -124,7 +124,18 @@ export function Shell({
           </div>
         </header>
 
-        <main className="flex-1">{children}</main>
+        {/*
+          * Les pages de gestion arrivent plutot que d'apparaitre.
+          *
+          * Une seule animation, sur le conteneur : le gerant consulte ces
+          * ecrans plusieurs fois par jour, pas trois cents, et une entree
+          * discrete aide a lire la hierarchie sans transformer un outil de
+          * travail en vitrine. La cle rejoue l'animation a chaque
+          * changement de page, sans quoi seule la premiere en profiterait.
+          */}
+        <main key={title} className="anim-monte flex-1">
+          {children}
+        </main>
       </div>
 
       {/* Barre d'onglets — mobile */}

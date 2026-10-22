@@ -33,6 +33,18 @@ export default function KitchenScreen() {
   const now = useNow(5000)
   const { etapes } = useReglages()
 
+  /**
+   * Les tickets deja vus sur ce poste.
+   *
+   * Seuls les nouveaux jouent leur arrivee. Sans cette memoire, un
+   * rechargement relancait l'animation de toute la file — trois cents
+   * tickets qui surgissent ensemble sur une tablette de cuisine, et le
+   * ticket qui venait reellement de tomber passait inapercu au milieu.
+   */
+  const dejaVus = useRef<Set<string>>(new Set())
+  const premierAffichage = useRef(true)
+  const [nouveaux, setNouveaux] = useState<Set<string>>(new Set())
+
   /** Impression du bon à l'arrivée, mémorisée sur ce poste. */
   const [autoPrint, setAutoPrint] = useState(() => {
     try {
@@ -130,6 +142,24 @@ export default function KitchenScreen() {
       setBusyId(null)
     }
   }
+
+  useEffect(() => {
+    const frais = new Set<string>()
+    for (const o of queue) {
+      if (!dejaVus.current.has(o.id)) {
+        frais.add(o.id)
+        dejaVus.current.add(o.id)
+      }
+    }
+    // A l'ouverture de l'ecran, tout est « nouveau » — et il n'y a
+    // pourtant aucune arrivee a signaler. On enregistre la file telle
+    // quelle, et seuls les tickets qui tombent ensuite se signalent.
+    if (premierAffichage.current) {
+      if (queue.length > 0) premierAffichage.current = false
+      return
+    }
+    if (frais.size > 0) setNouveaux(frais)
+  }, [queue])
 
   const active = queue.filter((o) => o.status !== 'ready')
   const ready = queue.filter((o) => o.status === 'ready')
@@ -258,6 +288,7 @@ export default function KitchenScreen() {
                 busy={busyId === order.id}
                 onAdvance={() => advance(order)}
                 unSeulGeste={etapes === 'une'}
+                vientDArriver={nouveaux.has(order.id)}
                 onPrint={() => print({ order, kind: 'kitchen' })}
                 onRecall={() => rappeler(order)}
               />
@@ -278,11 +309,13 @@ function Ticket({
   onPrint,
   onRecall,
   unSeulGeste,
+  vientDArriver,
 }: {
   order: Order
   now: number
   busy: boolean
   unSeulGeste: boolean
+  vientDArriver: boolean
   onAdvance: () => void
   onPrint: () => void
   onRecall: () => void
@@ -324,7 +357,7 @@ function Ticket({
 
   return (
     <article
-      className={`animate-ticket-in flex flex-col rounded-[13px] border-2 bg-ink-800 ${edge} ${
+      className={`${vientDArriver ? 'anim-surgit' : ''} flex flex-col rounded-[15px] border-2 bg-ink-800 ${edge} ${
         isReady ? 'opacity-75' : ''
       }`}
     >
@@ -439,7 +472,7 @@ function Ticket({
           <button
             onClick={onAdvance}
             disabled={busy}
-            className={`h-12 w-full rounded-[9px] text-[15px] font-bold transition-colors disabled:opacity-50 ${
+            className={`reagit h-12 w-full rounded-[11px] text-[15px] font-bold transition-colors disabled:opacity-50 disabled:active:scale-100 ${
               order.status === 'in_kitchen' && !unSeulGeste
                 ? 'bg-ink-700 text-white hover:bg-ink-600'
                 : 'bg-petrol-600 text-white hover:bg-petrol-500'

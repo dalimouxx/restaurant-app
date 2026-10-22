@@ -12,6 +12,7 @@ import {
 import { useAuth } from '../lib/store'
 import { roleLabel } from '../lib/format'
 import { Wordmark } from '../components/Shell'
+import { Emoji } from '../components/Emoji'
 import { HOME_BY_ROLE } from './LoginScreen'
 
 interface Station {
@@ -60,31 +61,37 @@ export default function PortalScreen() {
       <div className="mx-auto max-w-[940px] px-5 py-10 sm:py-16">
         <Wordmark />
 
-        <h1 className="mt-10 max-w-xl text-[32px] leading-[1.1] font-extrabold tracking-[-0.03em] text-white sm:text-[44px]">
+        <h1 className="anim-monte mt-10 max-w-xl text-[32px] leading-[1.1] font-extrabold tracking-[-0.03em] text-white sm:text-[44px]">
           Commandez, suivez, livrez.
         </h1>
+        <div className="mt-4 flex gap-3 text-[30px] sm:text-[36px]">
+          <Emoji vie="rebondit">🍔</Emoji>
+          <Emoji vie="rebondit" retard={180}>🍟</Emoji>
+          <Emoji vie="rebondit" retard={360}>🥤</Emoji>
+          <Emoji vie="flotte" retard={120}>🛵</Emoji>
+        </div>
         <p className="mt-3 max-w-md text-[16px] leading-relaxed text-ink-400">
           Une seule application pour la salle, la cuisine, la caisse et la route.
         </p>
 
-        <div className="mt-9 flex flex-wrap gap-3">
+        <div className="anim-cascade mt-9 flex flex-wrap gap-3">
           <Link
             to="/commander"
-            className="inline-flex h-14 items-center gap-2.5 rounded-[11px] bg-petrol-600 px-7 text-[16px] font-bold text-white transition-colors hover:bg-petrol-500"
+            className="reagit leve inline-flex h-14 items-center gap-2.5 rounded-[13px] bg-petrol-600 px-7 text-[16px] font-bold text-white transition-colors hover:bg-petrol-500"
           >
             <ShoppingBag size={19} strokeWidth={2.2} />
             Commander en ligne
           </Link>
           <Link
             to="/borne"
-            className="inline-flex h-14 items-center gap-2.5 rounded-[11px] border border-ink-700 px-7 text-[16px] font-bold text-ink-200 transition-colors hover:border-ink-600 hover:bg-ink-800"
+            className="reagit leve inline-flex h-14 items-center gap-2.5 rounded-[13px] border border-ink-700 px-7 text-[16px] font-bold text-ink-200 transition-colors hover:border-ink-600 hover:bg-ink-800"
           >
             <Monitor size={19} strokeWidth={2.2} />
             Mode borne
           </Link>
           <Link
             to="/ecran"
-            className="inline-flex h-14 items-center gap-2.5 rounded-[11px] border border-ink-700 px-7 text-[16px] font-bold text-ink-200 transition-colors hover:border-ink-600 hover:bg-ink-800"
+            className="reagit leve inline-flex h-14 items-center gap-2.5 rounded-[13px] border border-ink-700 px-7 text-[16px] font-bold text-ink-200 transition-colors hover:border-ink-600 hover:bg-ink-800"
           >
             <Tv size={19} strokeWidth={2.2} />
             Écran de salle
@@ -104,12 +111,12 @@ export default function PortalScreen() {
             )}
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="anim-cascade grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {STAFF.map((s) => (
               <Link
                 key={s.to}
                 to={s.to}
-                className="group rounded-[13px] border border-ink-800 bg-ink-800/40 p-4 transition-colors hover:border-ink-600 hover:bg-ink-800"
+                className="reagit leve group rounded-[16px] border border-ink-800 bg-ink-800/40 p-4 transition-colors hover:border-ink-600 hover:bg-ink-800"
               >
                 <s.icon
                   size={20}

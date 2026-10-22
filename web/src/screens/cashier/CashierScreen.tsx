@@ -798,7 +798,7 @@ function PaymentPanel({
               <button
                 key={k}
                 onClick={() => press(k)}
-                className="num min-h-11 rounded-[9px] border border-ink-200 bg-white text-[19px] font-semibold text-ink-900 transition-colors hover:bg-ink-50 active:bg-ink-100"
+                className="reagit-fort num min-h-11 rounded-[11px] border border-ink-200 bg-white text-[19px] font-semibold text-ink-900 transition-colors hover:bg-ink-50 active:bg-ink-100"
               >
                 {k}
               </button>
@@ -806,7 +806,7 @@ function PaymentPanel({
             <button
               onClick={() => press('back')}
               aria-label="Effacer un chiffre"
-              className="grid min-h-11 place-items-center rounded-[9px] border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-coral-50 hover:text-coral-600"
+              className="reagit-fort grid min-h-11 place-items-center rounded-[11px] border border-ink-200 bg-white text-ink-600 transition-colors hover:bg-coral-50 hover:text-coral-600"
             >
               <Delete size={19} />
             </button>
