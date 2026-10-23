@@ -178,12 +178,23 @@ const DEPART_RESERVE = 300;
 /**
  * Attendre qu'une tentative parallele ait fini d'enregistrer sa vente.
  *
- * Trois essais tres courts plutot qu'une longue attente : si elle est
- * en vol, elle atterrit en quelques millisecondes ; si elle n'existe
- * pas, inutile de faire patienter un client au comptoir.
+ * L'attente s'allonge a chaque tour, jusqu'a deux secondes en tout.
+ *
+ * Cent millisecondes suffisaient quand deux tentatives se croisaient.
+ * Elles ne suffisent plus quand la caisse remonte d'une coupure et
+ * rejoue huit ventes d'un coup : les sept perdantes font la queue
+ * derriere le meme verrou, et la gagnante met parfois plus longtemps a
+ * valider sa transaction. Elles repartaient alors creer une vente qui
+ * echouerait pareil, et le poste recevait une erreur pour une vente
+ * pourtant passee.
+ *
+ * Deux secondes d'attente ne sont jamais le mauvais choix ici : une
+ * reference deja prise veut dire que la vente EST en train d'etre
+ * enregistree. L'alternative, c'est un caissier qui croit l'encaissement
+ * rate et le refait — deux fois le meme sandwich, deux fois paye.
  */
 async function attendreLaConcurrente(clientRef) {
-  for (const pause of [0, 25, 75]) {
+  for (const pause of [0, 25, 75, 150, 300, 600, 900]) {
     if (pause) await new Promise((r) => setTimeout(r, pause));
     const trouvee = await Order.findOne({ where: { clientRef } });
     if (trouvee) return trouvee;

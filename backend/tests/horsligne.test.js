@@ -219,7 +219,25 @@ async function run() {
   /* ───────── La vente hors ligne remonte ───────── */
   console.log('\n— La coupure finit, les ventes remontent —')
 
-  const ilYAVingtMinutes = new Date(Date.now() - 20 * 60 * 1000).toISOString()
+  /**
+   * Vingt minutes en arriere — sans franchir minuit.
+   *
+   * La journee commerciale est la date du calendrier au fuseau du
+   * restaurant. Une vente annoncee « il y a vingt minutes » a 00 h 10
+   * appartient donc a la veille : la tranche reservee aujourd'hui ne la
+   * couvre plus, et elle repart avec le numero suivant de la journee
+   * d'hier. Ce n'est pas un defaut de la reservation, c'est le passage
+   * de minuit — et la serie echouait toutes les nuits entre minuit et
+   * minuit vingt, pour cette seule raison.
+   *
+   * On recule donc d'au plus ce qui nous separe du debut de la journee.
+   * Le passage de minuit lui-meme est verifie juste apres, pour ce
+   * qu'il est.
+   */
+  const debutDeJournee = new Date()
+  debutDeJournee.setHours(0, 2, 0, 0)
+  const recul = Math.min(20 * 60 * 1000, Math.max(0, Date.now() - debutDeJournee.getTime()))
+  const ilYAVingtMinutes = new Date(Date.now() - recul).toISOString()
   const rattrapage = await req('POST', '/orders/counter', {
     items: ligne,
     fulfillmentType: 'dine_in',
@@ -255,6 +273,33 @@ async function run() {
   check(
     invente.data?.orderNumber !== 1,
     `Un numero qui n'appartient a aucune tranche est ignore (${invente.data?.orderNumber})`
+  )
+
+  /**
+   * Et la vente qui franchit minuit.
+   *
+   * Une caisse coupee a 23 h 50 qui remonte a 00 h 10 rejoue des ventes
+   * qui appartiennent a la journee d'hier. La regle qui compte n'est pas
+   * le numero — c'est que l'argent est dans le tiroir et que la vente ne
+   * doit jamais disparaitre. Elle change de journee et prend un numero
+   * de cette journee-la : le ticket du client ne correspondra plus, ce
+   * qui est le moindre des deux maux.
+   */
+  const hier = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString()
+  const franchit = await req('POST', '/orders/counter', {
+    items: ligne,
+    fulfillmentType: 'dine_in',
+    clientRef: randomUUID(),
+    orderNumber: tranche.data.depuis,
+    priseA: hier,
+  }, cash)
+  check(
+    franchit.status === 201 && franchit.data?.orderNumber > 0,
+    `Une vente d'avant minuit n'est jamais perdue, meme si son numero change (${franchit.data?.orderNumber})`
+  )
+  check(
+    Math.abs(new Date(franchit.data?.createdAt) - new Date(hier)) < 60000,
+    'Elle reste datee de l\'heure ou elle a eu lieu, donc comptee sur la bonne journee'
   )
 
   /* Une horloge deregle ne doit pas antidater une vente. */

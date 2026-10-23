@@ -5,6 +5,9 @@ import { useAuth } from '../lib/store'
 import { useReglages } from '../lib/reglages'
 import { roleLabel } from '../lib/format'
 import { ConnectionDot } from './ConnectionDot'
+import { VerrouPoste } from './VerrouPoste'
+import { useVerrouInactivite } from '../lib/verrou'
+import { posteFor } from '../lib/install'
 
 export interface NavItem {
   to: string
@@ -36,6 +39,8 @@ export function Shell({
   const logout = useAuth((s) => s.logout)
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const poste = posteFor(pathname)
+  const { verrouille, deverrouiller } = useVerrouInactivite(poste, !!user)
 
   /**
    * Fermer la session laisse le poste chez lui.
@@ -60,6 +65,23 @@ export function Shell({
 
   return (
     <div className="flex min-h-dvh bg-ink-50">
+      {/*
+        * Le poste se couvre quand personne ne s'en occupe.
+        *
+        * Une tablette de caisse vit sur un comptoir, allumee et
+        * connectee toute la journee : celui qui s'en approche pendant
+        * que le caissier est au fond de la cuisine peut encaisser,
+        * annuler, remettre une commande. La cuisine et l'ecran de
+        * salle, eux, ne se verrouillent jamais — un ecran qui demande
+        * un code au coup de feu est un danger, et il est de toute facon
+        * derriere le comptoir.
+        */}
+      <VerrouPoste
+        ouvert={verrouille}
+        poste={poste}
+        onDeverrouille={deverrouiller}
+        onFermerSession={signOut}
+      />
       {/* Rail — grand écran */}
       <aside className="dark-surface sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col bg-ink-900 lg:flex">
         <div className="px-5 pt-5 pb-6">

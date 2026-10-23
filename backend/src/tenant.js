@@ -112,11 +112,28 @@ function cloisonner(model, { clePrimaire = false, partage = false } = {}) {
 
   model.addHook('beforeFind', (options) => {
     appliquer(options);
-    // Les tables liees doivent l'etre aussi : une commande filtree dont
-    // on joint les lignes sans filtre ramenerait des lignes etrangeres.
+    /**
+     * Les tables liees doivent l'etre aussi : une commande filtree dont
+     * on joint les lignes sans filtre ramenerait des lignes etrangeres.
+     *
+     * **Mais filtrer ne doit pas faire disparaitre le parent.** Poser un
+     * `where` sur une jointure suffit a la rendre obligatoire : la
+     * commande qui n'a pas encore de lignes cessait alors d'exister pour
+     * toute lecture qui les joint. Ce n'est pas theorique — chaque vente
+     * passe par cet etat pendant quelques millisecondes, entre
+     * l'enregistrement de la commande et celui de ses lignes, et une
+     * caisse qui rejoue sa file au retour du reseau tombait dedans une
+     * fois sur trois : le serveur repondait 500 pour une vente qui etait
+     * pourtant bien passee.
+     *
+     * On impose donc explicitement la jointure ouverte. Le cloisonnement
+     * reste entier : les lignes etrangeres sont toujours ecartees, elles
+     * n'emportent simplement plus la commande avec elles.
+     */
     for (const inclusion of options.include || []) {
       if (inclusion && inclusion.model && inclusion.model.cloisonne) {
         appliquer(inclusion);
+        if (inclusion.required !== true) inclusion.required = false;
       }
     }
   });

@@ -3,7 +3,16 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { surToutelInstallation } = require('../tenant');
 const { User } = require('../models');
-const { guard, recordFailure, recordSuccess, throttle } = require('../middleware/rateLimit');
+const {
+  guard,
+  recordFailure,
+  recordSuccess,
+  throttle,
+  ralentir,
+  recordSlowFailure,
+  recordSlowSuccess,
+} = require('../middleware/rateLimit');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -88,6 +97,68 @@ router.post('/login-code', guard(LOGIN), async (req, res) => {
   if (!user.isActive) return res.status(403).json({ error: 'Compte desactive.' });
 
   recordSuccess(LOGIN, req);
+  res.json({ token: generateToken(user), user: sanitize(user) });
+});
+
+/* ─────────── Lever le voile d'un poste verrouille ─────────── */
+
+/**
+ * Qui peut tenir quel poste. Le meme partage que cote ecran, mais c'est
+ * ici qu'il est applique : l'ecran se contente de cacher les liens.
+ */
+const ENCADREMENT = ['manager', 'admin', 'super_admin'];
+const TENANTS = {
+  caisse: ['cashier', ...ENCADREMENT],
+  cuisine: ['cook', ...ENCADREMENT],
+  gestion: ENCADREMENT,
+  livreur: ['driver', ...ENCADREMENT],
+  borne: ['cashier', ...ENCADREMENT],
+  espace: ['cashier', 'cook', 'driver', ...ENCADREMENT],
+};
+
+const DEVERROU = 'deverrouillage';
+
+/**
+ * Ce n'est pas une connexion, et c'est tout le point.
+ *
+ * La session du poste est deja ouverte — la caisse du jour, la commande
+ * a moitie saisie. On verifie seulement que celui qui reprend la
+ * tablette est de la maison. Trois consequences, chacune voulue :
+ *
+ * 1. `requireAuth` : il faut deja une session valide. La route n'est
+ *    donc pas une seconde porte d'entree au systeme ; sans token, elle
+ *    repond 401 avant meme de regarder le code.
+ * 2. Son propre compteur, qui ralentit au lieu de bloquer (voir
+ *    `ralentir`). Les ratés d'un ecran de verrouillage ne doivent pas
+ *    remplir le compteur de la page de connexion, que tout le
+ *    restaurant partage derriere une seule adresse.
+ * 3. Un code valide dont le role ne tient pas ce poste est refuse sans
+ *    toucher a la session en cours : un cuisinier qui tape son code sur
+ *    la tablette de gestion n'en prend pas la main et ne chasse pas le
+ *    gerant de la sienne. Il ne gagnait rien — l'ecran de gestion lui
+ *    aurait ferme la porte — mais il faisait perdre sa session au
+ *    gerant, et le journal aurait porte son nom.
+ */
+router.post('/deverrouiller', requireAuth, ralentir(DEVERROU), async (req, res) => {
+  const loginCode = String(req.body.loginCode ?? '').trim();
+  const poste = String(req.body.poste ?? '').trim();
+  if (!loginCode) return res.status(400).json({ error: 'Code requis.' });
+
+  const user = await User.findOne({ where: { loginCode, role: STAFF_ROLES } });
+  if (!user || !user.isActive) {
+    recordSlowFailure(DEVERROU, req);
+    return res.status(401).json({ error: 'Code incorrect.' });
+  }
+
+  const admis = TENANTS[poste];
+  if (admis && !admis.includes(user.role)) {
+    /* Un code juste, mais pas pour ce poste : on ne compte pas d'echec
+       — ce n'est pas une tentative d'intrusion, c'est une erreur de
+       tablette, et la punir ralentirait celui qui a le droit d'entrer. */
+    return res.status(403).json({ error: 'Ce poste n\'est pas le vôtre.' });
+  }
+
+  recordSlowSuccess(DEVERROU, req);
   res.json({ token: generateToken(user), user: sanitize(user) });
 });
 

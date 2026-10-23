@@ -151,16 +151,98 @@ function throttle(name, { max, windowMs }) {
   };
 }
 
+/* ─────────── Ralentir sans jamais fermer la porte ─────────── */
+
+/**
+ * Le compteur de l'ecran de verrouillage.
+ *
+ * Les paliers ci-dessus bloquent : au bout de huit echecs, plus personne
+ * ne se connecte pendant une minute, puis cinq, puis une heure. C'est
+ * exactement ce qu'il faut pour une page de connexion, et exactement ce
+ * qu'il ne faut pas pour lever le voile d'un poste deja ouvert.
+ *
+ * Un ecran de verrouillage se fait taper de travers tous les jours :
+ * quelqu'un passe devant la tablette et essaie, le caissier se trompe
+ * d'un chiffre, un enfant appuie sur le pave. Avec un blocage dur, la
+ * caisse finit couverte et inouvrable au milieu du service — pire que
+ * pas de verrou du tout, parce que le gerant debranchera le verrou.
+ *
+ * Alors on ralentit au lieu de bloquer. Apres quelques ratés, il faut
+ * attendre quelques secondes entre deux essais, et jamais plus que
+ * PLAFOND_MS. Dix secondes d'attente suffisent largement : epuiser dix
+ * mille codes en demandant dix secondes a chacun prend plus d'un jour,
+ * sous les yeux de l'equipe, sur une tablette posee sur le comptoir. Et
+ * celui qui revient des toilettes et tape juste n'attend rien.
+ */
+const APRES = 4;
+const PAS_MS = 2500;
+const PLAFOND_MS = 10 * 1000;
+
+const lenteurs = new Map();
+
+/** Middleware : impose un intervalle croissant apres quelques echecs. */
+function ralentir(name) {
+  return (req, res, next) => {
+    const entry = lenteurs.get(keyFor(name, req));
+    if (!entry || entry.count <= APRES) return next();
+
+    const attente = Math.min(PLAFOND_MS, (entry.count - APRES) * PAS_MS);
+    const reste = entry.lastAt + attente - Date.now();
+    if (reste <= 0) return next();
+
+    /**
+     * L'essai refuse compte lui aussi.
+     *
+     * Sans cela l'escalade ne demarre jamais : les essais bloques
+     * n'incrementant rien, le compteur reste a cinq et l'attente a deux
+     * secondes et demie — un script epuise alors les dix mille codes en
+     * une poignee d'heures. En comptant, il se retrouve au plafond en
+     * quelques secondes et chaque code lui coute dix secondes, sur une
+     * tablette posee sur un comptoir, sous les yeux de l'equipe.
+     *
+     * Le prix : celui qui arrive juste apres quelqu'un qui a martele
+     * l'ecran attend lui aussi, jusqu'a dix secondes. C'est le plafond
+     * qui rend ce prix acceptable — dix secondes d'agacement contre une
+     * caisse morte pendant une heure.
+     */
+    entry.count += 1;
+    entry.lastAt = Date.now();
+
+    const seconds = Math.ceil(reste / 1000);
+    res.set('Retry-After', String(seconds));
+    return res.status(429).json({
+      error: `Patientez ${seconds} seconde${seconds > 1 ? 's' : ''}.`,
+      retryAfter: seconds,
+    });
+  };
+}
+
+function recordSlowFailure(name, req) {
+  const key = keyFor(name, req);
+  const entry = lenteurs.get(key) ?? { count: 0, lastAt: 0 };
+  entry.count += 1;
+  entry.lastAt = Date.now();
+  lenteurs.set(key, entry);
+}
+
+function recordSlowSuccess(name, req) {
+  lenteurs.delete(keyFor(name, req));
+}
+
 /** Pour les tests : repart d'une table vide. */
 function reset() {
   buckets.clear();
   counters.clear();
+  lenteurs.clear();
 }
 
 const sweepCounters = setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of counters) {
     if (now - entry.startedAt > WINDOW_MS) counters.delete(key);
+  }
+  for (const [key, entry] of lenteurs) {
+    if (now - entry.lastAt > WINDOW_MS) lenteurs.delete(key);
   }
 }, 5 * 60 * 1000);
 sweepCounters.unref?.();
@@ -170,6 +252,9 @@ module.exports = {
   recordFailure,
   recordSuccess,
   throttle,
+  ralentir,
+  recordSlowFailure,
+  recordSlowSuccess,
   reset,
   WINDOW_MS,
   STEPS,

@@ -181,7 +181,20 @@ async function request<T>(
     } catch {
       /* réponse sans corps JSON */
     }
-    if (res.status === 401) {
+    /**
+     * Un 401 ne veut pas toujours dire « votre session a expire ».
+     *
+     * Il dit aussi « ce code est faux » quand on se presente a une
+     * porte. Les confondre coutait cher : un caissier qui se trompait
+     * d'un chiffre sur l'ecran de verrouillage perdait sa session
+     * entiere — donc sa caisse ouverte et sa commande en cours — pour
+     * une faute de frappe.
+     *
+     * On ne ferme donc la session que si la requete en portait une, et
+     * qu'elle n'etait pas une tentative d'identification.
+     */
+    const seIdentifiait = path.startsWith('/auth/')
+    if (res.status === 401 && !seIdentifiait && auth) {
       clearSession()
       sessionFinie?.()
     }
@@ -222,6 +235,29 @@ export const auth = {
       method: 'POST',
       body: { loginCode },
       auth: false,
+    })
+    storeSession(r.token, r.user)
+    return r.user
+  },
+
+  /**
+   * Lever le voile d'un poste verrouillé.
+   *
+   * Ce n'est pas une connexion : la session est déjà ouverte, on vérifie
+   * seulement que celui qui reprend le poste est bien quelqu'un de la
+   * maison. D'où une route à part, et c'est tout l'intérêt — l'écran de
+   * verrouillage se fait forcément taper de travers (quelqu'un passe,
+   * essaie, renonce ; le caissier se trompe d'un chiffre). Sur la route
+   * de connexion, ces ratés remplissent le compteur anti-force-brute que
+   * tout le restaurant partage derrière une seule adresse : au huitième,
+   * plus personne ne se connecte pendant une minute, puis cinq, puis une
+   * heure. Une caisse couverte qu'on ne peut plus ouvrir en plein service
+   * serait pire que pas de verrou du tout.
+   */
+  deverrouiller: async (loginCode: string, poste: string) => {
+    const r = await request<AuthResponse>('/auth/deverrouiller', {
+      method: 'POST',
+      body: { loginCode, poste },
     })
     storeSession(r.token, r.user)
     return r.user
