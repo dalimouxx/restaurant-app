@@ -241,6 +241,34 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS number_reservations_jour
      ON number_reservations ("restaurantId", "orderDate")`,
 
+  /**
+   * Les ecrans de service lisent tous la meme chose : les commandes
+   * d'un etablissement, dans un etat donne, sur la journee en cours.
+   *
+   * Sans index, chaque rafraichissement parcourt la table entiere.
+   * C'est invisible a quatre mille lignes — deux millisecondes — et
+   * c'est le cout dominant de chaque ecran a cent mille, soit une annee
+   * pour un seul restaurant. La caisse, la cuisine et l'ecran de salle
+   * rafraichissent tous les trois, en permanence, sur tous les postes a
+   * la fois : le parcours complet se paie autant de fois par minute
+   * qu'il y a d'ecrans allumes.
+   *
+   * L'etat avant la journee : il est bien plus selectif. Une file de
+   * caisse, ce sont les quelques commandes « a encaisser » ; la journee,
+   * c'est tout ce qui s'est vendu depuis l'ouverture.
+   */
+  `CREATE INDEX IF NOT EXISTS orders_ecrans
+     ON orders ("restaurantId", status, "orderDate")`,
+
+  /**
+   * Les rapports du gerant bornent par date de paiement, pas par
+   * journee commerciale : chiffre d'affaires de la semaine, comparaison
+   * de deux periodes, export comptable.
+   */
+  `CREATE INDEX IF NOT EXISTS orders_paiement
+     ON orders ("restaurantId", "paidAt")
+     WHERE "paidAt" IS NOT NULL`,
+
   `ALTER TABLE orders ADD COLUMN IF NOT EXISTS "clientRef" UUID`,
   `CREATE UNIQUE INDEX IF NOT EXISTS orders_client_ref
      ON orders ("restaurantId", "clientRef")
