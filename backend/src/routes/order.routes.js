@@ -1,8 +1,11 @@
 const express = require('express');
-const { filtreEtablissement } = require('../tenant');
+const { filtreEtablissement, restaurantCourant } = require('../tenant');
 const { Op } = require('sequelize');
 const { v4: uuidv4 } = require('uuid');
-const { Order, OrderItem, Product, ProductOption, DeliveryZone } = require('../models');
+const {
+  sequelize,
+  Order, OrderItem, Product, ProductOption, DeliveryZone, NumberReservation,
+} = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { deductStockForOrderItems, restoreStockForOrderItems } = require('./stock.routes');
 const socket = require('../sockets/socketHandler');
@@ -103,14 +106,144 @@ function fenetreDuService() {
   };
 }
 
+/**
+ * La reference d'un envoi, si elle est bien formee.
+ *
+ * On exige un UUID plutot que n'importe quelle chaine : une reference
+ * choisie librement par un client finirait par se repeter — un compteur
+ * remis a zero, deux postes qui demarrent sur la meme valeur — et deux
+ * ventes distinctes se confondraient en une seule. Une chaine mal formee
+ * est ignoree, pas refusee : mieux vaut une vente enregistree sans
+ * protection qu'une vente perdue au comptoir.
+ */
+const FORME_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function reference(valeur) {
+  const ref = String(valeur ?? '').trim().toLowerCase();
+  return FORME_UUID.test(ref) ? ref : null;
+}
+
+/**
+ * Le plus grand numero deja pris pour cette journee.
+ *
+ * « Pris » couvre deux choses, et c'est tout l'interet : les ventes
+ * enregistrees, et les tranches mises de cote pour un poste hors ligne.
+ * Une caisse privee de reseau pioche dans sa tranche ; si le serveur
+ * ignorait ces tranches, il attribuerait les memes numeros a ceux qui
+ * sont encore connectes, et les deux tickets « 42 » reviendraient par
+ * la fenetre.
+ *
+ * Le filtre d'etablissement est explicite : une agregation ne passe pas
+ * par les crochets de cloisonnement, et sans lui le compteur repartirait
+ * de celui du restaurant voisin.
+ */
+async function plusGrandNumeroPris(orderDate) {
+  const [desVentes, desTranches] = await Promise.all([
+    Order.max('orderNumber', { where: { orderDate, ...filtreEtablissement() } }),
+    NumberReservation.max('jusqua', { where: { orderDate, ...filtreEtablissement() } }),
+  ]);
+  return Math.max(
+    Number.isFinite(desVentes) ? desVentes : 0,
+    Number.isFinite(desTranches) ? desTranches : 0,
+  );
+}
+
+/**
+ * Ou commencent les numeros mis de cote pour une coupure.
+ *
+ * **En hauteur, et c'est tout l'interet.** La caisse reserve sa tranche
+ * des l'ouverture, avant la premiere vente. Prise au plus bas, elle
+ * occupait 1 a 30 — et la premiere commande du jour portait le numero
+ * 31, tous les jours, sans explication visible. Un gerant qui compte
+ * ses tickets le soir s'interroge, et il a raison.
+ *
+ * Posee a 300, elle ne gene plus personne : la journee repart a 1, les
+ * numeros du bas se remplissent normalement, et les ventes faites
+ * pendant une coupure portent des numeros nettement a part — ce qui est
+ * plutot commode le jour ou il faut les retrouver.
+ *
+ * Un service qui depasserait 300 ventes saute par-dessus la tranche et
+ * reprend apres. C'est rare, c'est visible, et c'est sans danger.
+ */
+const DEPART_RESERVE = 300;
+
+/**
+ * Le prochain numero libre pour une vente en ligne.
+ *
+ * « Libre » veut dire : pas deja servi, et pas a l'interieur d'une
+ * tranche mise de cote. On ne prend donc pas bêtement le plus grand
+ * plus un — sinon une tranche posee a 300 ferait commencer la journee
+ * a 331.
+ */
 async function getNextOrderNumber(orderDate) {
-  // Le filtre est explicite : une agregation ne passe pas par les
-  // crochets de cloisonnement, et sans lui le numero reprendrait au
-  // compteur du restaurant voisin au lieu de repartir a 1.
-  const highest = await Order.max('orderNumber', {
+  const servis = await Order.max('orderNumber', {
     where: { orderDate, ...filtreEtablissement() },
   });
-  return Number.isFinite(highest) ? highest + 1 : 1;
+  let candidat = (Number.isFinite(servis) ? servis : 0) + 1;
+
+  const tranches = await NumberReservation.findAll({
+    where: { orderDate },
+    order: [['depuis', 'ASC']],
+  });
+  for (const t of tranches) {
+    if (candidat >= t.depuis && candidat <= t.jusqua) candidat = t.jusqua + 1;
+  }
+  return candidat;
+}
+
+/**
+ * Le numero propose par un poste, s'il lui appartient vraiment.
+ *
+ * Un poste hors ligne a pioche dans la tranche qu'on lui a reservee, et
+ * il la rend ici. On verifie qu'elle existe : sans ce controle,
+ * n'importe quel appel pourrait choisir son numero et ecraser celui du
+ * voisin — ou se donner le « 1 » en plein service.
+ *
+ * Un numero qui ne correspond a aucune tranche est ignore, pas refuse :
+ * la vente a eu lieu, l'argent est dans le tiroir, et la perdre pour
+ * une histoire de numerotation serait le pire des deux maux. Elle
+ * prend alors le numero suivant, comme n'importe quelle vente.
+ */
+async function numeroReserve(valeur, orderDate) {
+  const numero = Number(valeur);
+  if (!Number.isInteger(numero) || numero < 1) return null;
+
+  const tranche = await NumberReservation.findOne({
+    where: {
+      orderDate,
+      depuis: { [Op.lte]: numero },
+      jusqua: { [Op.gte]: numero },
+    },
+  });
+  if (!tranche) return null;
+
+  // Deja servi : une vente rejouee sans sa reference, ou un poste qui a
+  // perdu le fil de sa tranche. On ne reprend pas un numero en service.
+  const occupe = await Order.findOne({ where: { orderDate, orderNumber: numero } });
+  return occupe ? null : numero;
+}
+
+/**
+ * Quand la vente a eu lieu, et a quelle journee commerciale elle
+ * appartient.
+ *
+ * Une heure absente, dans le futur, ou vieille de plus d'une journee ne
+ * vient pas d'une coupure de reseau mais d'une horloge deregle : on
+ * garde alors l'heure d'arrivee, qui est au moins vraie.
+ */
+const RETARD_MAX_MS = 24 * 60 * 60 * 1000;
+
+function momentDeLaVente(valeur) {
+  const maintenant = new Date();
+  const annonce = valeur ? new Date(valeur) : null;
+  const plausible =
+    annonce &&
+    !Number.isNaN(annonce.getTime()) &&
+    annonce <= maintenant &&
+    maintenant - annonce <= RETARD_MAX_MS;
+
+  const priseA = plausible ? annonce : maintenant;
+  return { orderDate: businessDay(priseA), priseA };
 }
 
 /**
@@ -126,6 +259,9 @@ router.post('/kiosk', throttle('borne', { max: 40, windowMs: 15 * 60 * 1000 }), 
 
   const order = await createOrderWithItems({
     items,
+    clientRef: req.body.clientRef,
+    orderNumber: req.body.orderNumber,
+    priseA: req.body.priseA,
     source: 'kiosk',
     fulfillmentType: fulfillmentType || 'pickup',
     status: 'awaiting_payment',
@@ -152,8 +288,26 @@ router.post(
       return res.status(400).json({ error: 'La commande est vide.' });
     }
 
+    /**
+     * Une vente deja encaissee, au comptoir, sans reseau.
+     *
+     * Hors ligne, le caissier fait les deux gestes d'affilee : il prend
+     * la commande et il prend l'argent. Les rejouer en deux appels au
+     * retour du reseau ouvrait une faille : si la creation passait et
+     * que l'encaissement echouait, la vente revenait « a encaisser »
+     * dans la file — et le client, deja parti, payait une seconde fois
+     * par le suivant qui prenait son numero.
+     *
+     * L'encaissement voyage donc avec la vente, dans la meme requete.
+     * Une reference, une seule reponse, et rien a recoller.
+     */
+    const paiement = encaissementAnnonce(req.body.paiement);
+
     const order = await createOrderWithItems({
       items,
+      clientRef: req.body.clientRef,
+      orderNumber: req.body.orderNumber,
+      priseA: req.body.priseA,
       source: 'counter',
       fulfillmentType: fulfillmentType || 'dine_in',
       status: 'awaiting_payment',
@@ -163,10 +317,31 @@ router.post(
       customerPhone: req.body.customerPhone,
     });
 
+    // `status` encore en attente : la vente vient d'etre creee, et non
+    // retrouvee par sa reference. Une vente deja encaissee ne se
+    // reencaisse pas — c'est ce qui rend l'envoi rejouable.
+    if (paiement && order.status === 'awaiting_payment') {
+      const servi = await encaisser(order, paiement.methode, req.user.id, paiement.quand);
+      return res.status(201).json(servi);
+    }
+
     socket.emitNewKitchenTicket(order);
     res.status(201).json(order);
   }
 );
+
+/** Un encaissement annonce par un poste, s'il est exploitable. */
+const MOYENS = ['cash', 'card', 'transfer'];
+
+function encaissementAnnonce(valeur) {
+  if (!valeur || typeof valeur !== 'object') return null;
+  const methode = MOYENS.includes(valeur.methode) ? valeur.methode : 'cash';
+  const quand = valeur.quand ? new Date(valeur.quand) : null;
+  return {
+    methode,
+    quand: quand && !Number.isNaN(quand.getTime()) && quand <= new Date() ? quand : new Date(),
+  };
+}
 
 /**
  * Authentification facultative.
@@ -266,6 +441,7 @@ router.post(
 
   const order = await createOrderWithItems({
     items,
+    clientRef: req.body.clientRef,
     source: 'online',
     fulfillmentType,
     status: etatInitial,
@@ -303,6 +479,28 @@ async function createOrderWithItems(opts) {
     deliveryAddress, deliveryLat, deliveryLng, deliveryZoneId,
     deliveryFee = 0, minimumOrder = 0, zoneName,
   } = opts;
+
+  /**
+   * Un envoi rejoue n'aboutit qu'une fois.
+   *
+   * Une caisse qui encaisse puis perd la reponse — reseau coupe,
+   * serveur qui redemarre — n'avait aucun moyen de savoir si la vente
+   * etait passee. Le caissier retentait, et vendait deux fois ; le
+   * client, lui, recevait deux tickets avec deux numeros differents
+   * pour un seul sandwich.
+   *
+   * Le poste donne donc une reference a sa vente **avant** de
+   * l'envoyer. Si elle est deja la, on rend celle qui existe. Le
+   * controle est double : ici, pour repondre proprement, et un index
+   * unique en base, pour le cas ou deux tentatives arriveraient dans
+   * la meme seconde — la verification seule laisserait passer les
+   * deux.
+   */
+  const clientRef = reference(opts.clientRef);
+  if (clientRef) {
+    const deja = await Order.findOne({ where: { clientRef } });
+    if (deja) return getFullOrder(deja.id);
+  }
 
   /**
    * Livraison suspendue.
@@ -388,17 +586,34 @@ async function createOrderWithItems(opts) {
     );
   }
 
-  const orderDate = businessDay();
+  /**
+   * La journee d'une vente, et son heure.
+   *
+   * Une vente encaissee hors ligne arrive au serveur bien apres avoir
+   * ete faite. Sans son heure reelle, elle porterait celle du retour du
+   * reseau : la cuisine verrait un ticket « a l'instant » pour un
+   * sandwich prepare il y a vingt minutes, et le journal du gerant
+   * entasserait tout le creux de la coupure sur une seule minute.
+   *
+   * Le poste envoie donc ce qu'il a note. On ne lui fait pas une
+   * confiance aveugle : une heure dans le futur, ou vieille de plus
+   * d'une journee, ne vient pas d'une coupure mais d'une horloge
+   * deregle — on garde alors l'heure d'arrivee, qui est au moins vraie.
+   */
+  const { orderDate, priseA } = momentDeLaVente(opts.priseA);
 
   // Deux commandes prises dans la meme seconde peuvent viser le meme
   // numero. L'index unique les departage et on retente, plutot que de
   // laisser deux tickets « 12 » circuler en salle.
+  const reserve = await numeroReserve(opts.orderNumber, orderDate);
+
   let order = null;
   for (let attempt = 1; attempt <= 5 && !order; attempt++) {
     try {
       order = await Order.create({
-        orderNumber: await getNextOrderNumber(orderDate),
+        orderNumber: reserve ?? (await getNextOrderNumber(orderDate)),
         orderDate,
+        createdAt: priseA,
         source,
         fulfillmentType,
         status,
@@ -414,9 +629,26 @@ async function createOrderWithItems(opts) {
         deliveryLng,
         deliveryZoneId: deliveryZoneId ?? null,
         qrToken: uuidv4(),
+        clientRef,
       });
     } catch (err) {
       if (err.name !== 'SequelizeUniqueConstraintError' || attempt === 5) throw err;
+      /**
+       * Deux contraintes uniques peuvent sauter ici, et elles
+       * n'appellent pas la meme reponse.
+       *
+       * Le numero du jour : deux ventes prises dans la meme seconde
+       * ont vise le meme. On retente, et la seconde prend le suivant.
+       *
+       * La reference de l'envoi : la vente vient d'etre enregistree
+       * par une tentative parallele. Retenter ne ferait que rejouer
+       * le meme echec — on rend celle qui existe, ce que le poste
+       * attendait depuis le debut.
+       */
+      if (clientRef) {
+        const concurrente = await Order.findOne({ where: { clientRef } });
+        if (concurrente) return getFullOrder(concurrente.id);
+      }
     }
   }
 
@@ -437,25 +669,15 @@ async function getFullOrder(orderId) {
 /**
  * File d'attente de la caisse.
  *
- * Bornee a douze heures : une commande prise a la borne puis abandonnee
- * par le client reste « en attente de paiement » pour toujours. Sans cette
- * limite, la file grossit de jour en jour et le caissier finit par
- * chercher la commande du moment au milieu de celles de la semaine. Douze
- * heures couvrent largement un service, meme a cheval sur minuit, sans
- * avoir a raisonner sur les fuseaux.
- */
-/**
- * Douze heures etaient une borne raisonnable, et une erreur.
+ * Bornee a la fenetre du service : une commande prise a la borne puis
+ * abandonnee par le client reste « en attente de paiement » pour
+ * toujours. Sans borne, la file grossit de jour en jour et le caissier
+ * finit par chercher la commande du moment au milieu de celles de la
+ * semaine.
  *
- * Elles enjambent minuit : a 11 h, la file contenait encore les
- * commandes de 23 h la veille. Or les numeros repartent a 1 chaque
- * journee de service — le caissier voyait donc deux « 42 » dans sa
- * liste, sans aucun moyen de savoir lequel etait celui du client
- * plante devant lui. La fenetre du service regle les deux : elle tient
- * la journee en cours, et les six dernieres heures pour qu'une
- * commande prise avant minuit ne disparaisse pas a minuit une.
+ * Voir `fenetreDuService` pour le detail — et pour les deux versions
+ * qui s'y sont cassees avant celle-ci.
  */
-
 router.get('/pending-payment', requireAuth, requireRole('cashier', 'manager', 'admin', 'super_admin'), async (req, res) => {
   const orders = await Order.findAll({
     where: {
@@ -508,6 +730,23 @@ router.post('/:id/pay', requireAuth, requireRole('cashier', 'manager', 'admin', 
     }
   }
 
+  res.json(await encaisser(order, methode, req.user.id));
+});
+
+/**
+ * Ce qui se passe quand une commande est payee.
+ *
+ * Extrait de la route pour que la vente encaissee hors ligne suive
+ * exactement le meme chemin a son retour : meme destination, meme
+ * deduction de stock, memes annonces aux ecrans. Deux chemins
+ * d'encaissement qui divergent, c'est un stock juste d'un cote et faux
+ * de l'autre, et personne ne sait lequel croire.
+ *
+ * `quand` permet de garder l'heure reelle du paiement : un encaissement
+ * fait pendant la coupure ne doit pas apparaitre a l'heure du retour du
+ * reseau dans le journal du gerant.
+ */
+async function encaisser(order, methode, cashierId, quand = null) {
   /**
    * Ou va la commande une fois payee.
    *
@@ -519,8 +758,8 @@ router.post('/:id/pay', requireAuth, requireRole('cashier', 'manager', 'admin', 
   const { etapesCuisine } = await getSettings();
   order.status = etapesCuisine === 'aucune' ? 'ready' : 'in_kitchen';
   order.paymentMethod = methode;
-  order.paidAt = new Date();
-  order.cashierId = req.user.id;
+  order.paidAt = quand ?? new Date();
+  order.cashierId = cashierId;
   order.isParked = false;
   await order.save();
 
@@ -531,8 +770,75 @@ router.post('/:id/pay', requireAuth, requireRole('cashier', 'manager', 'admin', 
   socket.emitNewKitchenTicket(order);
   socket.emitBoard(order);
 
-  res.json(order);
-});
+  return order;
+}
+
+/**
+ * Mettre des numeros de cote, pour tenir sans reseau.
+ *
+ * Une caisse ne choisit pas le moment ou l'ADSL tombe. Tant qu'elle est
+ * connectee, elle se fait donc reserver une tranche d'avance — « les
+ * numeros 51 a 80 sont a toi » — et elle y pioche le jour ou la
+ * connexion lache. Le serveur, lui, ne les attribue plus a personne.
+ *
+ * **Une tranche courte, renouvelee souvent.** Chaque tranche non
+ * consommee laisse un trou dans la numerotation du jour : reserver cent
+ * numeros pour en servir trois ferait sauter le compteur de 1 a 101 au
+ * premier service. Trente couvrent largement une coupure d'ADSL, et la
+ * caisse en redemande des qu'elle en a brule la moitie.
+ *
+ * Le poste est un identifiant d'appareil, pas de personne : c'est la
+ * tablette qui travaille hors ligne, et elle garde ses numeros si le
+ * caissier change en cours de service.
+ */
+const TRANCHE_MAX = 60;
+const TRANCHE_DEFAUT = 30;
+
+router.post(
+  '/reserver-numeros',
+  requireAuth,
+  requireRole('cashier', 'manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const poste = String(req.body.poste ?? '').trim().slice(0, 80);
+    if (!poste) {
+      return res.status(400).json({ error: 'Poste non identifie.' });
+    }
+    const combien = Math.min(
+      TRANCHE_MAX,
+      Math.max(1, Number(req.body.combien) || TRANCHE_DEFAUT),
+    );
+
+    const orderDate = businessDay();
+
+    /**
+     * Deux caisses qui demandent leur tranche en meme temps doivent
+     * recevoir des tranches disjointes. L'index unique sur le numero
+     * ne protege que les ventes, pas les reservations : on serialise
+     * donc la lecture et l'ecriture dans une transaction, en verrouillant
+     * la table des reservations du jour.
+     */
+    const tranche = await sequelize.transaction(async (t) => {
+      await sequelize.query(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        { bind: [`numeros:${restaurantCourant() ?? 'global'}:${orderDate}`], transaction: t },
+      );
+      // En hauteur : une tranche posee au plus bas ferait commencer la
+      // journee a 31, tous les jours, sans explication visible.
+      const depuis = Math.max(await plusGrandNumeroPris(orderDate), DEPART_RESERVE - 1) + 1;
+      return NumberReservation.create(
+        { orderDate, depuis, jusqua: depuis + combien - 1, poste },
+        { transaction: t },
+      );
+    });
+
+    res.status(201).json({
+      orderDate,
+      depuis: tranche.depuis,
+      jusqua: tranche.jusqua,
+      poste: tranche.poste,
+    });
+  },
+);
 
 /**
  * Écran mural des commandes prêtes.

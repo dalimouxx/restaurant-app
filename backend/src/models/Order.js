@@ -87,6 +87,22 @@ const Order = sequelize.define('Order', {
   qrToken: { type: DataTypes.STRING }, // QR scanne par le livreur pour confirmer la remise
 
   /**
+   * La reference que le poste a donnee a cette vente avant de l'envoyer.
+   *
+   * C'est ce qui rend un envoi rejouable sans danger. Une caisse qui
+   * encaisse puis perd la reponse — reseau coupe, serveur qui redemarre
+   * — n'a aujourd'hui aucun moyen de savoir si la vente est passee. Le
+   * caissier retente, et vend deux fois. Avec cette reference, le
+   * serveur reconnait la vente deja enregistree et renvoie la meme,
+   * au lieu d'en creer une seconde.
+   *
+   * Elle devient indispensable des que la caisse travaille hors ligne :
+   * une file de ventes a rejouer n'a de sens que si chacune ne peut
+   * aboutir qu'une fois.
+   */
+  clientRef: { type: DataTypes.UUID, allowNull: true },
+
+  /**
    * Annulation. Une commande ne se supprime jamais : elle garde son numero
    * et sa place dans la suite, et porte la trace de qui l'a annulee et
    * pourquoi. Un trou dans la numerotation serait le premier signe qu'on

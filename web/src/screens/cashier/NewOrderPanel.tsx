@@ -2,7 +2,18 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Minus, Plus, ShoppingBag, Trash2, UtensilsCrossed } from 'lucide-react'
 import { catalog, orders } from '../../lib/api'
 import { lineUnitPrice } from '../../lib/store'
-import { moneyDT, orderNo } from '../../lib/format'
+import { journeeDuJour, moneyDT, orderNo } from '../../lib/format'
+import {
+  carteRetenue,
+  composerVente,
+  estUnePanneReseau,
+  mettreDeCote,
+  prendreUnNumero,
+  retenirLaCarte,
+  ticketDeSecours,
+} from '../../lib/horsLigne'
+import { usePrint } from '../../components/PrintHost'
+import { useAuth } from '../../lib/store'
 import type { CartLine, Category, Product, ProductOption } from '../../lib/types'
 import { Button, EmptyState, Modal, Skeleton, useToast } from '../../components/ui'
 import { LineOptions, OptionPicker } from '../../components/OptionPicker'
@@ -29,15 +40,44 @@ export function NewOrderPanel({
   const [mode, setMode] = useState<'dine_in' | 'pickup'>('dine_in')
   const [submitting, setSubmitting] = useState(false)
   const { notify } = useToast()
+  const { print } = usePrint()
+  const user = useAuth((st) => st.user)
 
+  /**
+   * La carte, du serveur ou de la mémoire de la tablette.
+   *
+   * Tout le reste du mode hors ligne ne sert à rien si le caissier ne
+   * peut pas voir les plats : il ne peut composer aucune commande, et
+   * les numéros mis de côté dorment pour rien. On recopie donc la carte
+   * à chaque fois qu'on la reçoit, et on la ressert telle quelle le
+   * jour où le réseau manque.
+   *
+   * Une carte de la veille vaut mieux que pas de carte. Un prix changé
+   * ce matin passerait inaperçu — mais le serveur recalcule de toute
+   * façon le montant à l'arrivée, à partir de ses propres prix : ce que
+   * voit le caissier peut être périmé, ce qui est facturé ne l'est pas.
+   */
   const load = useCallback(async () => {
     try {
       const { categories: cats, products: prods } = await catalog.menu()
       setCategories(cats)
       setProducts(prods)
       setActiveCat((c) => c ?? cats[0]?.id ?? null)
+      retenirLaCarte({ categories: cats, products: prods })
     } catch {
-      notify('Menu indisponible.', 'error')
+      const retenue = carteRetenue<{ categories: Category[]; products: Product[] }>()
+      if (retenue) {
+        setCategories(retenue.carte.categories)
+        setProducts(retenue.carte.products)
+        setActiveCat((c) => c ?? retenue.carte.categories[0]?.id ?? null)
+        notify('Carte de la dernière connexion : le réseau ne répond pas.', 'info')
+      } else {
+        notify(
+          'Menu indisponible, et cette tablette ne l\'a jamais chargé. ' +
+            'Encaissez à la main.',
+          'error',
+        )
+      }
     } finally {
       setLoading(false)
     }
@@ -93,20 +133,106 @@ export function NewOrderPanel({
     })
   }
 
+  /**
+   * Enregistre la vente, avec ou sans réseau.
+   *
+   * La référence est tirée au sort **avant** l'envoi, et c'est tout
+   * l'intérêt : si la réponse se perd, la vente peut être rejouée sans
+   * risque d'être enregistrée deux fois. Sans elle, un caissier qui
+   * retente après un écran figé vend deux fois le même sandwich.
+   *
+   * Si le réseau manque, la vente part dans la file locale avec un
+   * numéro pioché dans la tranche réservée d'avance. Le client reçoit
+   * son ticket, l'argent entre dans le tiroir, et le service continue.
+   *
+   * **Deux cas où l'on refuse, et où il faut le dire franchement.**
+   * Plus de numéros en réserve : en inventer un le ferait réapparaître
+   * sur le ticket d'un autre client. Stockage indisponible : une vente
+   * qu'on croit mise de côté et qui ne l'est pas disparaît sans bruit,
+   * et l'écart de caisse du soir devient inexplicable.
+   */
   async function submit() {
     if (lines.length === 0) return
     setSubmitting(true)
+
+    /**
+     * Hors ligne, la vente part deja encaissee — en especes.
+     *
+     * Ce n'est pas un raccourci : au comptoir, le caissier prend la
+     * commande et l'argent dans le meme geste, et un terminal de carte
+     * ne fonctionne pas davantage sans reseau. L'enregistrer « a
+     * encaisser » la ferait revenir dans la file au retour du reseau,
+     * et le client — deja parti — serait encaisse une seconde fois par
+     * le suivant qui prendrait son numero.
+     */
+    const vente = composerVente(lines, mode, 0, undefined, {
+      methode: 'cash',
+      quand: new Date().toISOString(),
+    })
     try {
-      const order = await orders.createAtCounter(lines, mode)
+      const order = await orders.createAtCounter(lines, mode, undefined, vente.clientRef)
       setLines([])
       onCreated(order.orderNumber)
       notify(`Commande ${orderNo(order.orderNumber)} enregistrée.`, 'success')
       onClose()
+      return
     } catch (e) {
-      notify(e instanceof Error ? e.message : 'Commande refusée.', 'error')
-    } finally {
-      setSubmitting(false)
+      if (!estUnePanneReseau(e)) {
+        notify(e instanceof Error ? e.message : 'Commande refusée.', 'error')
+        setSubmitting(false)
+        return
+      }
     }
+
+    // Le réseau manque : on continue sans lui.
+    const numero = prendreUnNumero(journeeDuJour())
+    if (numero === null) {
+      notify(
+        'Réseau coupé et plus aucun numéro en réserve. Encaissez à la main et ' +
+          'ressaisissez la vente au retour du réseau.',
+        'error',
+      )
+      setSubmitting(false)
+      return
+    }
+
+    if (!mettreDeCote({ ...vente, orderNumber: numero })) {
+      notify(
+        "Cette tablette ne peut rien enregistrer hors ligne. Notez la vente sur " +
+          'papier : elle serait perdue.',
+        'error',
+      )
+      setSubmitting(false)
+      return
+    }
+
+    /**
+     * Le ticket, tout de suite.
+     *
+     * Une caisse qui prend l'argent sans rien donner n'est pas une
+     * caisse — et le client a besoin de son numéro : c'est lui qui
+     * s'affichera sur l'écran de salle quand son plat sera prêt. On
+     * l'imprime depuis ce que la tablette vient d'enregistrer, sans
+     * rien demander au serveur.
+     */
+    try {
+      print({
+        order: ticketDeSecours({ ...vente, orderNumber: numero }),
+        kind: 'receipt',
+        cashierName: user?.fullName,
+      })
+    } catch {
+      // Pas d'imprimante : le numéro reste annoncé à l'écran.
+    }
+
+    setLines([])
+    onCreated(numero)
+    notify(
+      `${orderNo(numero)} encaissée en espèces, hors ligne. Elle partira au retour du réseau.`,
+      'info',
+    )
+    onClose()
+    setSubmitting(false)
   }
 
   return (

@@ -46,6 +46,8 @@ import { DiscountModal } from './DiscountModal'
 import { usePrint } from '../../components/PrintHost'
 import { useAuth } from '../../lib/store'
 import { Emoji } from '../../components/Emoji'
+import { BandeauHorsLigne } from '../../components/BandeauHorsLigne'
+import { estUnePanneReseau } from '../../lib/horsLigne'
 
 /** Coupures courantes, pour encaisser sans taper le montant. */
 const QUICK_CASH = [5, 10, 20, 50]
@@ -119,7 +121,25 @@ function OpenSession({ onOpened }: { onOpened: (s: CashSession) => void }) {
       onOpened(await cashier.open(value))
       notify('Caisse ouverte.', 'success')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ouverture impossible.')
+      /**
+       * Ouvrir une caisse sans réseau est refusé, et c'est délibéré.
+       *
+       * Le fond de caisse est la référence de tout le service : c'est
+       * lui qui dit, le soir, si le tiroir est juste. Une ouverture
+       * enregistrée seulement sur la tablette peut disparaître avec
+       * elle — et l'écart du soir devient alors indéfendable, aux
+       * dépens du caissier. On le dit franchement plutôt que de laisser
+       * une erreur technique.
+       */
+      setError(
+        estUnePanneReseau(err)
+          ? 'Réseau coupé : une caisse ne peut pas s\'ouvrir sans lui. Le fond de ' +
+            'caisse sert de référence au contrôle du soir, il doit être enregistré ' +
+            'sur le serveur. Réessayez dès que le réseau revient.'
+          : err instanceof Error
+            ? err.message
+            : 'Ouverture impossible.',
+      )
     } finally {
       setBusy(false)
     }
@@ -331,7 +351,13 @@ function Register({
        d'encaissement sortait de l'écran — exactement au moment où le
        caissier en a besoin. Sur téléphone la disposition est en une
        seule colonne : là, elle doit pouvoir s'allonger. */
-    <div className="grid min-h-[calc(100dvh-4rem)] grid-cols-1 lg:h-[calc(100dvh-4rem)] lg:min-h-0 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+    <div className="flex min-h-[calc(100dvh-4rem)] flex-col lg:h-[calc(100dvh-4rem)] lg:min-h-0">
+      {/* Au-dessus de tout, et seulement quand il a quelque chose a
+          dire : un bandeau permanent devient invisible en trois jours,
+          et ne sert plus a rien le jour ou il compte. */}
+      <BandeauHorsLigne />
+
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
       {/* File */}
       <section className="flex min-h-0 flex-col border-ink-200 lg:border-r">
         <div className="flex items-center justify-between gap-3 border-b border-ink-200 px-5 py-2.5">
@@ -547,6 +573,7 @@ function Register({
         }}
       />
       )}
+      </div>
     </div>
   )
 }
@@ -902,7 +929,25 @@ function CloseSession({
     try {
       setResult(await cashier.close(total, compte))
     } catch (e) {
-      notify(e instanceof Error ? e.message : 'Clôture impossible.', 'error')
+      /**
+       * Clôturer sans réseau est refusé, pour la même raison inversée.
+       *
+       * Le total du service se calcule à partir des ventes du serveur.
+       * Hors ligne, celles de la coupure n'y sont pas encore : l'écart
+       * serait calculé sur des données partielles, et il tomberait sur
+       * le caissier sans que personne sache d'où il vient. Mieux vaut
+       * pas de clôture qu'une fausse.
+       */
+      notify(
+        estUnePanneReseau(e)
+          ? 'Réseau coupé : la clôture attendra. Les ventes de la coupure ne sont ' +
+            'pas encore remontées, et l\'écart serait calculé sur une partie du ' +
+            'service seulement.'
+          : e instanceof Error
+            ? e.message
+            : 'Clôture impossible.',
+        'error',
+      )
     } finally {
       setBusy(false)
     }

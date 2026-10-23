@@ -15,6 +15,7 @@ const { Setting } = require('./Setting');
 const AuditLog = require('./AuditLog');
 const DeliveryZone = require('./DeliveryZone');
 const { Restaurant, slugifier } = require('./Restaurant');
+const NumberReservation = require('./NumberReservation');
 const { cloisonner } = require('../tenant');
 
 /**
@@ -29,7 +30,7 @@ const { cloisonner } = require('../tenant');
 [
   Category, Ingredient, Product, ProductIngredient, ProductOption,
   Order, OrderItem, CashSession, StockMovement, DriverLocation,
-  AuditLog, DeliveryZone,
+  AuditLog, DeliveryZone, NumberReservation,
 ].forEach((m) => cloisonner(m));
 
 // Les comptes clients n'appartiennent a aucun etablissement : dans une
@@ -93,4 +94,5 @@ module.exports = {
   Setting,
   AuditLog,
   DeliveryZone,
+  NumberReservation,
 };

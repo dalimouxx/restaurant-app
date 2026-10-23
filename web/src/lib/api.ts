@@ -381,6 +381,11 @@ export const orders = {
     lines: CartLine[],
     fulfillmentType: 'dine_in' | 'pickup',
     contact?: { customerName?: string; customerPhone?: string },
+    /**
+     * La reference rend l'envoi rejouable : une caisse qui encaisse
+     * puis perd la reponse peut retenter sans vendre deux fois.
+     */
+    clientRef?: string,
   ) =>
     request<Order>('/orders/counter', {
       method: 'POST',
@@ -389,8 +394,40 @@ export const orders = {
         fulfillmentType,
         customerName: contact?.customerName,
         customerPhone: contact?.customerPhone,
+        clientRef,
       },
     }),
+
+  /**
+   * Rejoue une vente faite pendant une coupure.
+   *
+   * Elle porte son numero — pioche dans la tranche reservee d'avance —
+   * et son heure reelle. Sans cette derniere, la cuisine verrait un
+   * ticket « a l'instant » pour un plat prepare il y a vingt minutes.
+   */
+  rejouer: (vente: {
+    clientRef: string
+    orderNumber: number
+    priseA: string
+    fulfillmentType: 'dine_in' | 'pickup'
+    items: { productId: string; quantity: number; optionIds: string[] }[]
+    customerName?: string
+    customerPhone?: string
+    /**
+     * L'encaissement voyage avec la vente, et non dans un second appel :
+     * une creation qui passe suivie d'un encaissement qui echoue
+     * ferait revenir la vente « a encaisser », et le client, deja
+     * parti, paierait une seconde fois par le suivant.
+     */
+    paiement?: { methode: 'cash' | 'card' | 'transfer'; quand: string }
+  }) => request<Order>('/orders/counter', { method: 'POST', body: vente }),
+
+  /** Met des numeros de cote, pour tenir pendant une coupure. */
+  reserverNumeros: (poste: string, combien?: number) =>
+    request<{ orderDate: string; depuis: number; jusqua: number; poste: string }>(
+      '/orders/reserver-numeros',
+      { method: 'POST', body: { poste, combien } },
+    ),
 
   createOnline: (
     lines: CartLine[],

@@ -5,10 +5,11 @@
  * sur un téléphone ou une tablette, et lui permettre de s'ouvrir quand le
  * réseau est mauvais.
  *
- * Ce n'est PAS un mode hors-ligne : la caisse a besoin du serveur pour
- * encaisser, la cuisine pour recevoir ses tickets. Un vrai fonctionnement
- * hors réseau demande de mettre les commandes en file d'attente et de les
- * rejouer ensuite, ce qui est un autre chantier.
+ * Il ne fait PAS le mode hors-ligne à lui seul — c'est la caisse qui s'en
+ * charge, en mettant ses ventes en file et en les rejouant au retour du
+ * réseau (voir `lib/horsLigne.ts`). Ce fichier n'en est que la condition :
+ * sans lui, une tablette rechargée pendant une coupure ne retrouverait
+ * même pas l'application à ouvrir.
  *
  * Stratégie :
  *  — les fichiers d'assets portent une empreinte dans leur nom et ne

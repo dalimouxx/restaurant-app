@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { settingsApi } from './api'
 import type { Settings } from './types'
+import { reglagesRetenus, retenirLesReglages } from './horsLigne'
 
 /**
  * Réglages de l'établissement, partagés par tous les écrans.
@@ -17,8 +18,33 @@ import type { Settings } from './types'
  */
 let promesse: Promise<Settings> | null = null
 
+/**
+ * Les réglages, du serveur ou de la mémoire du poste.
+ *
+ * Le service worker fait démarrer l'application sans réseau, mais il ne
+ * met jamais l'API en cache — et il a raison : un stock ou une file
+ * périmés valent moins que rien. Les réglages, eux, ne changent pas
+ * trois fois par jour. Sans ce repli, une tablette rechargée pendant
+ * une coupure s'ouvrait sur une caisse sans nom d'établissement, sans
+ * monnaie, et incapable d'imprimer le moindre ticket.
+ */
 export function reglages(): Promise<Settings> {
-  if (!promesse) promesse = settingsApi.get()
+  if (!promesse) {
+    promesse = settingsApi
+      .get()
+      .then((s) => {
+        retenirLesReglages(s)
+        return s
+      })
+      .catch((e) => {
+        const retenus = reglagesRetenus<Settings>()
+        if (retenus) return retenus
+        // Rien en mémoire non plus : l'appelant a ses valeurs de repli,
+        // et une promesse qui échoue vaut mieux qu'un écran figé.
+        promesse = null
+        throw e
+      })
+  }
   return promesse
 }
 

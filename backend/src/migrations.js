@@ -212,6 +212,40 @@ const STATEMENTS = [
    * latin bien mieux qu'une case vide. Rempli, il voit sa carte dans sa
    * langue, plat par plat, au rythme du gerant.
    */
+  /**
+   * La reference donnee par le poste a une vente, avant de l'envoyer.
+   *
+   * L'index est unique par etablissement, et partiel : les commandes
+   * d'avant cette colonne n'en ont pas, et deux `NULL` ne se gelent
+   * jamais l'un l'autre de toute facon. C'est lui qui garantit qu'un
+   * envoi rejoue n'aboutit qu'une fois, meme si deux tentatives
+   * arrivent dans la meme seconde.
+   */
+  /**
+   * Les tranches de numeros mises de cote pour un poste hors ligne.
+   *
+   * Sans elles, une caisse privee de reseau ne peut pas numeroter ses
+   * ventes — et deux caisses qui comptent chacune dans leur coin
+   * finissent par servir deux tickets « 42 » le meme midi.
+   */
+  `CREATE TABLE IF NOT EXISTS number_reservations (
+     id UUID PRIMARY KEY,
+     "restaurantId" UUID,
+     "orderDate" DATE NOT NULL,
+     depuis INTEGER NOT NULL,
+     jusqua INTEGER NOT NULL,
+     poste VARCHAR(80) NOT NULL,
+     "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+     "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+   )`,
+  `CREATE INDEX IF NOT EXISTS number_reservations_jour
+     ON number_reservations ("restaurantId", "orderDate")`,
+
+  `ALTER TABLE orders ADD COLUMN IF NOT EXISTS "clientRef" UUID`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS orders_client_ref
+     ON orders ("restaurantId", "clientRef")
+     WHERE "clientRef" IS NOT NULL`,
+
   `ALTER TABLE products ADD COLUMN IF NOT EXISTS "nameAr" VARCHAR(255)`,
   `ALTER TABLE products ADD COLUMN IF NOT EXISTS "descriptionAr" TEXT`,
   `ALTER TABLE categories ADD COLUMN IF NOT EXISTS "nameAr" VARCHAR(255)`,

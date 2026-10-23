@@ -13,7 +13,7 @@ set -u
 
 cd "$(dirname "$0")/.." || exit 1
 
-SERIES=(integration options settings menu deroule cancel service caisse cuisine gestion delivery-race e2e-delivery web-contract securite multi-restaurant identites arabe session deploiement parcours)
+SERIES=(integration options settings menu deroule cancel service caisse cuisine gestion delivery-race e2e-delivery web-contract securite multi-restaurant identites arabe session horsligne caisse-horsligne deploiement parcours)
 LOGS=$(mktemp -d)
 total_ok=0
 total_ko=0
