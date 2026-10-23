@@ -35,6 +35,8 @@ export interface User {
 export interface Category {
   id: string
   name: string
+  /** Nom arabe, facultatif : vide, la carte arabe garde le nom d'origine. */
+  nameAr?: string | null
   displayOrder: number
 }
 
@@ -60,6 +62,9 @@ export interface Product {
   id: string
   name: string
   description?: string | null
+  /** Nom et description en arabe, facultatifs. Vides, l'original tient. */
+  nameAr?: string | null
+  descriptionAr?: string | null
   price: number
   imageUrl?: string | null
   /** Épuisé pour aujourd'hui — réversible d'un geste. */

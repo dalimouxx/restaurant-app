@@ -2,7 +2,7 @@ const express = require('express');
 const { Restaurant, slugifier } = require('../models/Restaurant');
 const { User, Order } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { surToutelInstallation, avecRestaurant } = require('../tenant');
+const { surToutelInstallation, avecRestaurant, restaurantCourant } = require('../tenant');
 const { oublierCache } = require('../middleware/restaurantPublic');
 const { badRequest } = require('../errors');
 const { record } = require('../audit');
@@ -130,5 +130,53 @@ router.patch('/:id', ...seulSuperAdmin, async (req, res) => {
 
   res.json(etablissement);
 });
+
+/**
+ * Le gerant pose le logo de son propre etablissement.
+ *
+ * Sans cette route, seul le super admin le pouvait — et un restaurant
+ * installe seul, sans chaine au-dessus, n'aurait jamais pu mettre le
+ * sien sur ses tickets ni sur sa page d'accueil. Il ne touche que son
+ * logo et son nom : l'etat de service, le repere d'adresse et les
+ * autres etablissements restent hors de sa portee.
+ */
+router.patch(
+  '/mien/apparence',
+  requireAuth,
+  requireRole('manager', 'admin', 'super_admin'),
+  async (req, res) => {
+    const id = restaurantCourant();
+    if (!id) {
+      throw badRequest('Aucun etablissement designe.');
+    }
+
+    const etablissement = await surToutelInstallation(() => Restaurant.findByPk(id));
+    if (!etablissement) {
+      return res.status(404).json({ error: 'Etablissement introuvable.' });
+    }
+
+    const { name, logoUrl } = req.body;
+    if (name !== undefined) {
+      if (String(name).trim().length < 2) throw badRequest('Nom trop court.');
+      etablissement.name = String(name).trim();
+    }
+    if (logoUrl !== undefined) etablissement.logoUrl = logoUrl || null;
+
+    await surToutelInstallation(() => etablissement.save());
+    oublierCache();
+
+    await record(req, {
+      action: 'restaurant.apparence',
+      details: { id: etablissement.id, logo: Boolean(etablissement.logoUrl) },
+    });
+
+    res.json({
+      id: etablissement.id,
+      name: etablissement.name,
+      slug: etablissement.slug,
+      logoUrl: etablissement.logoUrl,
+    });
+  }
+);
 
 module.exports = router;

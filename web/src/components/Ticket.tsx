@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+import { logoPourTicket } from '../lib/logoTicket'
 import { dateTime, fulfillmentLabel, money, orderNo, timeShort } from '../lib/format'
 import type { Order, Settings } from '../lib/types'
 
@@ -26,6 +28,20 @@ export function Ticket({
   const isKitchen = kind === 'kitchen'
   const isDelivery = kind === 'delivery'
 
+  // Le bon de cuisine reste au passe : il n'a besoin que du numero, et
+  // un logo y ferait perdre une ligne de papier a chaque commande.
+  const [logo, setLogo] = useState<string | null>(null)
+  useEffect(() => {
+    if (isKitchen) return
+    let vivant = true
+    logoPourTicket(settings.etablissement?.logoUrl).then((l) => {
+      if (vivant) setLogo(l)
+    })
+    return () => {
+      vivant = false
+    }
+  }, [isKitchen, settings.etablissement?.logoUrl])
+
   return (
     <div className="ticket">
       {/* En-tête : le bon de cuisine n'a pas besoin de l'adresse, il reste
@@ -46,6 +62,10 @@ export function Ticket({
         </div>
       ) : (
         <div className="t-center">
+          {/* Le logo passe en noir et blanc franc avant d'etre imprime :
+              une tete thermique n'a ni gris ni couleur, et decide mal
+              toute seule. Voir lib/logoTicket.ts. */}
+          {logo && <img src={logo} alt="" className="t-logo" />}
           <div className="t-title">{settings.restaurantName}</div>
           {settings.address && <div className="t-small">{settings.address}</div>}
           {settings.phone && <div className="t-small">Tél. {settings.phone}</div>}

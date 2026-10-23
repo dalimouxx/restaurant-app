@@ -61,6 +61,24 @@ function cleanName(value, what) {
   return name.slice(0, 120);
 }
 
+/**
+ * Le nom arabe, facultatif.
+ *
+ * Il ne passe pas par `cleanName`, qui exige deux caracteres et
+ * refuserait une case laissee vide — or c'est le cas normal : personne
+ * ne ressaisira la carte entiere avant d'ouvrir. Vide vaut « pas
+ * traduit », et l'ecran retombe sur le nom d'origine.
+ */
+function nomArabe(value) {
+  const nom = String(value ?? '').trim();
+  return nom ? nom.slice(0, 120) : null;
+}
+
+function texteArabe(value) {
+  const texte = String(value ?? '').trim();
+  return texte ? texte.slice(0, 500) : null;
+}
+
 function cleanPrice(value) {
   const price = Number(String(value ?? '').replace(',', '.'));
   if (!Number.isFinite(price) || price < 0) {
@@ -163,6 +181,7 @@ router.post('/categories', requireAuth, requireRole(...MANAGER), async (req, res
     const last = await Category.max('displayOrder', { where: filtreEtablissement() });
     const category = await Category.create({
       name,
+      nameAr: nomArabe(req.body.nameAr),
       displayOrder: Number.isFinite(last) ? last + 1 : 0,
     });
     res.status(201).json(category);
@@ -185,7 +204,12 @@ router.put('/categories/:id', requireAuth, requireRole(...MANAGER), async (req, 
   try {
     const category = await Category.findByPk(req.params.id);
     if (!category) return res.status(404).json({ error: 'Categorie introuvable.' });
-    await category.update({ name: cleanName(req.body.name, 'Nom de la categorie') });
+    const patch = {};
+    if (req.body.name !== undefined) {
+      patch.name = cleanName(req.body.name, 'Nom de la categorie');
+    }
+    if (req.body.nameAr !== undefined) patch.nameAr = nomArabe(req.body.nameAr);
+    await category.update(patch);
     res.json(category);
   } catch (err) {
     fail(res, err);
@@ -243,6 +267,10 @@ router.post('/', requireAuth, requireRole(...MANAGER), async (req, res) => {
     });
     const product = await Product.create({
       name: cleanName(req.body.name, 'Nom du plat'),
+      // L'arabe est facultatif : on ne le passe pas par cleanName, qui
+      // exige deux caracteres et refuserait une case laissee vide.
+      nameAr: nomArabe(req.body.nameAr),
+      descriptionAr: texteArabe(req.body.descriptionAr),
       price: cleanPrice(req.body.price),
       description: description ? String(description).slice(0, 500) : null,
       imageUrl: normalizeImage(imageUrl) ?? null,
@@ -280,6 +308,10 @@ router.put('/:id', requireAuth, requireRole(...MANAGER), async (req, res) => {
 
     const patch = {};
     if (req.body.name !== undefined) patch.name = cleanName(req.body.name, 'Nom du plat');
+    if (req.body.nameAr !== undefined) patch.nameAr = nomArabe(req.body.nameAr);
+    if (req.body.descriptionAr !== undefined) {
+      patch.descriptionAr = texteArabe(req.body.descriptionAr);
+    }
     if (req.body.price !== undefined) patch.price = cleanPrice(req.body.price);
     if (req.body.description !== undefined) {
       patch.description = req.body.description

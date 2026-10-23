@@ -4,6 +4,7 @@ import { ArrowRight, X } from 'lucide-react'
 import { orderNo } from '../lib/format'
 import { commandeAReprendre, oublierCommande, type Reprise } from '../lib/derniereCommande'
 import { Emoji } from './Emoji'
+import { useT } from '../lib/traductions'
 
 /**
  * « Vous avez une commande en cours. »
@@ -14,6 +15,7 @@ import { Emoji } from './Emoji'
  * sur une commande qu'il a déjà récupérée.
  */
 export function RepriseCommande() {
+  const t = useT()
   const [reprise, setReprise] = useState<Reprise | null>(null)
 
   useEffect(() => {
@@ -27,25 +29,25 @@ export function RepriseCommande() {
       <Emoji vie="bat" className="text-[22px]">🍔</Emoji>
       <div className="min-w-0 flex-1">
         <p className="text-[14px] font-bold text-petrol-900">
-          Votre commande {orderNo(reprise.numero)} est en cours
+          {t('reprise.votreCommande')} {orderNo(reprise.numero)} {t('reprise.enCours')}
         </p>
         <p className="text-[12.5px] text-petrol-700">
-          Reprenez le suivi là où vous l'aviez laissé.
+          {t('reprise.reprenez')}
         </p>
       </div>
       <Link
         to={`/commande/${reprise.id}`}
         className="reagit inline-flex h-10 shrink-0 items-center gap-1.5 rounded-[10px] bg-petrol-600 px-4 text-[13.5px] font-bold text-white transition-colors hover:bg-petrol-500"
       >
-        Suivre
-        <ArrowRight size={15} strokeWidth={2.4} />
+        {t('reprise.suivre')}
+        <ArrowRight size={15} strokeWidth={2.4} className="rtl:-scale-x-100" />
       </Link>
       <button
         onClick={() => {
           oublierCommande()
           setReprise(null)
         }}
-        aria-label="Masquer"
+        aria-label={t('reprise.masquer')}
         className="reagit-fort shrink-0 rounded-[8px] p-1 text-petrol-700 transition-colors hover:bg-petrol-100"
       >
         <X size={16} />

@@ -107,6 +107,35 @@ export function clearSession() {
   }
 }
 
+/**
+ * Remplace le jeton sans toucher au reste de la session.
+ *
+ * Le serveur le réémet de lui-même quand il a dépassé la moitié de sa
+ * vie : la session suit alors la journée de travail au lieu de mourir
+ * au coup de feu.
+ */
+function remplacerJeton(token: string) {
+  try {
+    localStorage.setItem(TOKEN_KEY, token)
+  } catch {
+    /* mode privé : la session vit le temps de l'onglet */
+  }
+}
+
+/**
+ * Ce qu'on fait quand la session est réellement finie.
+ *
+ * Effacer le stockage ne suffisait pas : l'écran restait visuellement
+ * connecté, chaque appel échouait, et rien ne disait quoi faire. On
+ * prévient donc l'application, qui ramène la personne à la connexion.
+ */
+type SurSessionFinie = () => void
+let sessionFinie: SurSessionFinie | null = null
+
+export function quandLaSessionFinit(f: SurSessionFinie) {
+  sessionFinie = f
+}
+
 async function request<T>(
   path: string,
   options: { method?: string; body?: unknown; auth?: boolean } = {},
@@ -152,9 +181,16 @@ async function request<T>(
     } catch {
       /* réponse sans corps JSON */
     }
-    if (res.status === 401) clearSession()
+    if (res.status === 401) {
+      clearSession()
+      sessionFinie?.()
+    }
     throw new ApiError(message, res.status)
   }
+
+  // Session glissante : le serveur réémet le jeton quand il vieillit.
+  const frais = res.headers.get('X-Jeton-Renouvele')
+  if (frais) remplacerJeton(frais)
 
   if (res.status === 204) return undefined as T
   const text = await res.text()
@@ -221,6 +257,9 @@ export const auth = {
 
 export interface ProductInput {
   name: string
+  /** Nom arabe, facultatif : vide, la carte arabe garde le nom d'origine. */
+  nameAr?: string | null
+  descriptionAr?: string | null
   price: number
   /** Temps de préparation annoncé, en minutes. */
   prepMinutes?: number
@@ -287,8 +326,13 @@ export const catalog = {
 
   createCategory: (name: string) =>
     request<Category>('/products/categories', { method: 'POST', body: { name } }),
-  renameCategory: (id: string, name: string) =>
-    request<Category>(`/products/categories/${id}`, { method: 'PUT', body: { name } }),
+  renameCategory: (id: string, name: string, nameAr?: string | null) =>
+    request<Category>(`/products/categories/${id}`, {
+      method: 'PUT',
+      // `undefined` ne part pas dans le corps : renommer sans toucher a
+      // l'arabe ne doit pas l'effacer.
+      body: nameAr === undefined ? { name } : { name, nameAr },
+    }),
   deleteCategory: (id: string) =>
     request<{ ok: true }>(`/products/categories/${id}`, { method: 'DELETE' }),
   reorderCategories: (ids: string[]) =>
@@ -579,4 +623,17 @@ export const restaurants = {
     id: string,
     body: Partial<{ name: string; notes: string; logoUrl: string | null; isActive: boolean }>,
   ) => request<Restaurant>(`/restaurants/${id}`, { method: 'PATCH', body }),
+
+  /**
+   * Le gérant change le logo et le nom de SON établissement.
+   *
+   * Une route à part, et non la précédente : un gérant n'a pas à
+   * pouvoir suspendre un restaurant, ni à désigner lequel il modifie.
+   * Le serveur prend celui de sa session.
+   */
+  apparence: (body: { name?: string; logoUrl?: string | null }) =>
+    request<{ id: string; name: string; slug: string; logoUrl: string | null }>(
+      '/restaurants/mien/apparence',
+      { method: 'PATCH', body },
+    ),
 }

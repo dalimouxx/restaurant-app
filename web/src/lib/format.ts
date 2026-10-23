@@ -17,6 +17,63 @@ export function orderNo(n: number): string {
   return `#${String(n).padStart(3, '0')}`
 }
 
+/** La journée commerciale d'aujourd'hui, au fuseau du restaurant. */
+export function journeeDuJour(): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Africa/Tunis',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date())
+}
+
+/**
+ * Ce ticket vient-il d'un service precedent ?
+ *
+ * Les numeros repartent a 1 chaque journee commerciale. Un ticket pris
+ * a 23 h 50 reste en cuisine apres minuit, et peut donc porter le meme
+ * numero qu'un ticket du jour. Le cuisinier a besoin de les distinguer
+ * d'un coup d'oeil — d'ou la mention « hier » a cote du numero, plutot
+ * que de masquer le plus ancien : le plat, lui, est bien reel.
+ */
+export function vientDeLaVeille(orderDate?: string | null): boolean {
+  if (!orderDate) return false
+  // Une date seule (AAAA-MM-JJ) se compare telle quelle ; un horodatage
+  // complet doit d'abord etre ramene au fuseau du restaurant, sinon une
+  // caisse ouverte a 23 h paraitrait dater de la veille.
+  const jour = orderDate.length === 10
+    ? orderDate
+    : new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Africa/Tunis',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(orderDate))
+  return jour !== journeeDuJour()
+}
+
+/** « mercredi 22 octobre » — pour nommer un jour sans ambiguite. */
+export function dateLongue(iso: string): string {
+  return new Date(iso).toLocaleDateString('fr-FR', {
+    timeZone: 'Africa/Tunis',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+}
+
+/**
+ * L'heure seule aujourd'hui, la date et l'heure sinon.
+ *
+ * « Ouverte a 14:32 » se lit comme aujourd'hui, quel que soit le jour
+ * ou la caisse a reellement ete ouverte.
+ */
+export function dateEtHeure(iso: string): string {
+  return vientDeLaVeille(iso)
+    ? `le ${dateLongue(iso)} à ${timeShort(iso)}`
+    : `à ${timeShort(iso)}`
+}
+
 export function timeShort(iso: string): string {
   return new Date(iso).toLocaleTimeString('fr-FR', {
     hour: '2-digit',

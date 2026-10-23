@@ -21,6 +21,9 @@ import {
   orderNo,
   sourceLabel,
   timeShort,
+  vientDeLaVeille,
+  dateLongue,
+  dateEtHeure,
 } from '../../lib/format'
 import type { CashSession, Order, PaymentMethod } from '../../lib/types'
 import { useReglages } from '../../lib/reglages'
@@ -42,6 +45,7 @@ import { CashCountGrid, useCashCount } from './CashCount'
 import { DiscountModal } from './DiscountModal'
 import { usePrint } from '../../components/PrintHost'
 import { useAuth } from '../../lib/store'
+import { Emoji } from '../../components/Emoji'
 
 /** Coupures courantes, pour encaisser sans taper le montant. */
 const QUICK_CASH = [5, 10, 20, 50]
@@ -391,6 +395,11 @@ function Register({
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="num text-[13.5px] font-semibold text-ink-900">
+                      {vientDeLaVeille(o.orderDate) && (
+                        <span className="me-1.5 rounded-[5px] bg-saffron-100 px-1.5 py-0.5 text-[10.5px] font-extrabold tracking-[0.04em] text-saffron-700 uppercase">
+                          hier
+                        </span>
+                      )}
                       {money(o.totalAmount)} DT
                     </p>
                     <p className="text-[12px] text-ink-400">
@@ -437,6 +446,13 @@ function Register({
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[13px] text-ink-600">
+                          {/* Deux « 12 » dans la file, c'est le caissier
+                              qui encaisse la mauvaise commande. */}
+                          {vientDeLaVeille(o.orderDate) && (
+                            <span className="me-1.5 rounded-[5px] bg-saffron-100 px-1.5 py-0.5 text-[10.5px] font-extrabold tracking-[0.04em] text-saffron-700 uppercase">
+                              hier
+                            </span>
+                          )}
                           {o.items?.length ?? 0} article
                           {(o.items?.length ?? 0) > 1 ? 's' : ''} · {sourceLabel[o.source]}
                         </p>
@@ -951,8 +967,24 @@ function CloseSession({
         </>
       }
     >
+      {/* Une caisse qu'on a oublie de cloturer hier soir affichait
+          « Ouverte a 14:32 » — exactement comme celle du jour. Le
+          caissier comptait alors deux journees pour une, et l'ecart
+          tombait sur lui. Des qu'elle ne date pas d'aujourd'hui, on le
+          dit en grand, avant qu'il ne compte quoi que ce soit. */}
+      {vientDeLaVeille(session.openedAt) && (
+        <p className="anim-surgit mb-3 flex items-start gap-2 rounded-[11px] border border-saffron-500/35 bg-saffron-50 px-3.5 py-3 text-[13px] leading-snug text-saffron-800">
+          <Emoji vie="fretille" className="mt-px">⚠️</Emoji>
+          <span>
+            Cette caisse a été ouverte{' '}
+            <span className="font-bold">{dateLongue(session.openedAt)}</span> et n'a
+            jamais été clôturée. Ce que vous allez compter couvre donc plus d'une
+            journée de service.
+          </span>
+        </p>
+      )}
       <p className="mb-3 text-[13.5px] text-ink-500">
-        Ouverte à {timeShort(session.openedAt)} avec un fond de{' '}
+        Ouverte {dateEtHeure(session.openedAt)} avec un fond de{' '}
         <span className="num font-semibold text-ink-700">
           {moneyDT(session.openingFloat)}
         </span>

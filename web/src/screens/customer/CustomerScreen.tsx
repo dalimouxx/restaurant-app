@@ -35,10 +35,17 @@ import { Emoji, emojiPlat, emojiPour } from '../../components/Emoji'
 import { useReglages } from '../../lib/reglages'
 import { retenirCommande } from '../../lib/derniereCommande'
 import { RepriseCommande } from '../../components/RepriseCommande'
+import { InstallerPop } from '../../components/InstallerPop'
+import { SelecteurLangue } from '../../components/SelecteurLangue'
+import { useT, nomTraduit } from '../../lib/traductions'
+import { useLangue } from '../../lib/langue'
 
 /** Indicatif : le montant réel est toujours recalculé par le serveur. */
 
 export default function CustomerScreen() {
+  const t = useT()
+  const lang = useLangue()
+  const { reglages: reglagesEtablissement } = useReglages()
   const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [activeCat, setActiveCat] = useState<string | null>(null)
@@ -83,31 +90,34 @@ export default function CustomerScreen() {
     <div className="min-h-dvh bg-ink-50 pb-28">
       <header className="sticky top-0 z-30 border-b border-ink-200 bg-white/92 backdrop-blur-md">
         <div className="mx-auto flex h-16 max-w-3xl items-center justify-between gap-4 px-4">
-          <button onClick={() => navigate('/')} aria-label="Accueil">
+          <button onClick={() => navigate('/')} aria-label={t('carte.accueil')}>
             <Wordmark dark={false} />
           </button>
-          <button
-            onClick={() => navigate('/mes-commandes')}
-            className="text-[13.5px] font-semibold text-ink-600 transition-colors hover:text-petrol-600"
-          >
-            Mes commandes
-          </button>
+          <div className="flex items-center gap-3">
+            <SelecteurLangue />
+            <button
+              onClick={() => navigate('/mes-commandes')}
+              className="text-[13.5px] font-semibold text-ink-600 transition-colors hover:text-petrol-600"
+            >
+              {t('vitrine.mesCommandes')}
+            </button>
+          </div>
         </div>
       </header>
 
       {opening && !opening.open && (
         <div className="border-b border-saffron-500/35 bg-saffron-50 px-4 py-3 text-center sm:px-6">
           <p className="text-[13.5px] leading-snug font-semibold text-saffron-700">
-            Nous sommes fermés pour le moment.
+            {t('carte.ferme')}
             {opening.opensAt && (
               <>
-                {' '}Réouverture {opening.opensDay} à{' '}
+                {' '}{t('carte.reouverture')} {opening.opensDay} {t('carte.a')}{' '}
                 <span className="num">{opening.opensAt}</span>.
               </>
             )}
           </p>
           <p className="mt-0.5 text-[12.5px] text-saffron-700/80">
-            Vous pouvez composer votre commande, elle sera acceptée à l'ouverture.
+            {t('carte.fermeMaisComposez')}
           </p>
         </div>
       )}
@@ -118,11 +128,11 @@ export default function CustomerScreen() {
         </div>
         <div className="py-6">
           <h1 className="anim-monte flex items-center gap-2.5 text-[27px] leading-tight font-extrabold tracking-[-0.025em] text-ink-900">
-            Notre carte
+            {t('carte.titre')}
             <Emoji vie="rebondit" className="text-[28px]">🍟</Emoji>
           </h1>
           <p className="mt-1 text-[14.5px] text-ink-500">
-            Retrait sur place ou livraison, paiement à la réception.
+            {t('carte.sousTitre')}.
           </p>
         </div>
 
@@ -141,9 +151,13 @@ export default function CustomerScreen() {
                     }`}
                   >
                     <Emoji vie={c.id === activeCat ? 'fretille' : 'immobile'}>
+                      {/* L'emoji se devine sur le nom d'origine : les
+                          correspondances sont ecrites en francais, et une
+                          categorie traduite retomberait sur l'assiette
+                          par defaut. */}
                       {emojiPour(c.name)}
                     </Emoji>
-                    {c.name}
+                    {nomTraduit(c, lang)}
                   </button>
                 ))}
           </div>
@@ -153,7 +167,7 @@ export default function CustomerScreen() {
           {loading ? (
             [0, 1, 2].map((i) => <Skeleton key={i} className="h-[88px]" />)
           ) : visible.length === 0 ? (
-            <EmptyState icon={UtensilsCrossed} title="Rien dans cette catégorie" />
+            <EmptyState icon={UtensilsCrossed} title={t('carte.rienIci')} />
           ) : (
             <div key={activeCat ?? 'tout'} className="anim-cascade space-y-2.5">
             {visible.map((p) => (
@@ -186,6 +200,18 @@ export default function CustomerScreen() {
         </div>
       )}
 
+      {/* Elle n'apparait qu'une fois le panier entame : le client a
+          montre son interet, et la proposition se comprend. Avant, elle
+          ne produirait qu'un refus — et le refus est retenu. */}
+      <InstallerPop
+        pret={cart.lines.length > 0}
+        nomRestaurant={reglagesEtablissement?.restaurantName}
+        logoUrl={reglagesEtablissement?.etablissement?.logoUrl}
+        // Au-dessus de la barre du panier : 1rem de marge, le bouton, et
+        // son propre bas de barre. Elles apparaissent ensemble.
+        decalageBas="calc(4rem + max(1rem, env(safe-area-inset-bottom)))"
+      />
+
       <Checkout open={checkout} onClose={() => setCheckout(false)} />
 
       <OptionPicker
@@ -210,7 +236,12 @@ function MenuRow({
   categorie?: string
   onAdd: () => void
 }) {
+  const t = useT()
+  const lang = useLangue()
   const out = !product.isAvailable
+  const nom = nomTraduit(product, lang)
+  const descriptif =
+    lang === 'ar' ? product.descriptionAr || product.description : product.description
   return (
     <Card className={`flex items-center gap-3.5 p-3.5 ${out ? 'opacity-55' : ''}`}>
       <div className="size-16 shrink-0 overflow-hidden rounded-[9px] bg-ink-100">
@@ -225,13 +256,13 @@ function MenuRow({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-bold text-ink-900">{product.name}</p>
-        {product.description && !out && (
-          <p className="mt-0.5 line-clamp-1 text-[13px] text-ink-500">{product.description}</p>
+        <p className="texte-auto text-[15px] font-bold text-ink-900">{nom}</p>
+        {descriptif && !out && (
+          <p className="texte-auto mt-0.5 line-clamp-1 text-[13px] text-ink-500">{descriptif}</p>
         )}
         {out && (
           <p className="mt-0.5 text-[13px] font-semibold text-coral-600">
-            Épuisé pour aujourd'hui
+            {t('carte.epuise')}
           </p>
         )}
         <p className="num mt-1 text-[15px] font-bold text-ink-900">
@@ -241,7 +272,7 @@ function MenuRow({
       {!out && (
         <button
           onClick={onAdd}
-          aria-label={`Ajouter ${product.name}`}
+          aria-label={`${t('carte.ajouter')} ${nom}`}
           className="grid size-10 shrink-0 place-items-center rounded-full bg-petrol-50 text-petrol-600 transition-colors hover:bg-petrol-600 hover:text-white"
         >
           <Plus size={19} strokeWidth={2.6} />
@@ -254,6 +285,8 @@ function MenuRow({
 /* ───────────────────────── Validation ───────────────────────── */
 
 function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const t = useT()
+  const lang = useLangue()
   const cart = useCustomerCart()
   const user = useAuth((s) => s.user)
   const [mode, setMode] = useState<'pickup' | 'delivery'>('pickup')
@@ -399,15 +432,15 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
       <Modal
         open={open && !needsAccount}
         onClose={onClose}
-        title="Votre commande"
+        title={t('suivi.titre')}
         width="max-w-lg"
         footer={
           <>
             <Button variant="ghost" onClick={onClose}>
-              Continuer mes achats
+              {t('carte.continuerAchats')}
             </Button>
             <Button onClick={submit} loading={busy}>
-              Confirmer
+              {t('carte.confirmer')}
             </Button>
           </>
         }
@@ -416,8 +449,8 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
           {cart.lines.map((l, i) => (
             <li key={`${l.product.id}-${i}`} className="flex items-center gap-3">
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[14.5px] font-semibold text-ink-900">
-                  {l.product.name}
+                <p className="texte-auto truncate text-[14.5px] font-semibold text-ink-900">
+                  {nomTraduit(l.product, lang)}
                 </p>
                 <LineOptions options={l.options} />
                 <p className="num text-[13px] text-ink-500">{moneyDT(lineUnitPrice(l))}</p>
@@ -425,7 +458,7 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
               <div className="flex items-center gap-0.5 rounded-full border border-ink-200 p-0.5">
                 <button
                   onClick={() => cart.decrement(i)}
-                  aria-label="Retirer un"
+                  aria-label={t('carte.retirerUn')}
                   className="grid size-7 place-items-center rounded-full text-ink-600 hover:bg-ink-100"
                 >
                   <Minus size={14} strokeWidth={2.4} />
@@ -433,7 +466,7 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
                 <span className="num w-5 text-center text-[14px] font-bold">{l.quantity}</span>
                 <button
                   onClick={() => cart.increment(i)}
-                  aria-label="Ajouter un"
+                  aria-label={t('carte.ajouterUn')}
                   className="grid size-7 place-items-center rounded-full text-ink-600 hover:bg-ink-100"
                 >
                   <Plus size={14} strokeWidth={2.4} />
@@ -458,21 +491,21 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
           <ModeCard
             active={mode === 'pickup'}
             icon={Store}
-            label="Je récupère"
-            detail="Sans frais"
+            label={t('carte.jeRecupere')}
+            detail={t('carte.sansFrais')}
             onClick={() => setMode('pickup')}
           />
           <ModeCard
             active={mode === 'delivery'}
             indisponible={!livraisonPossible}
             icon={Bike}
-            label="Livraison"
+            label={t('carte.livrer')}
             detail={
               !livraisonOuverte
-                ? 'Suspendue ce soir'
+                ? t('carte.suspendueCeSoir')
                 : zoneList.length === 0
-                  ? 'Indisponible'
-                  : `dès ${moneyDT(cheapest)}`
+                  ? t('carte.indisponible')
+                  : `${t('vitrine.livraisonDes')} ${moneyDT(cheapest)}`
             }
             onClick={() => livraisonPossible && setMode('delivery')}
           />
@@ -483,8 +516,8 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
             <Emoji vie="fretille" className="mt-px">🛵</Emoji>
             <span>
               {livraisonOuverte
-                ? "Aucune zone de livraison n'est ouverte pour le moment."
-                : 'La livraison est suspendue en ce moment. Vous pouvez commander et venir récupérer.'}
+                ? t('carte.aucuneZoneOuverte')
+                : t('carte.livraisonSuspendueLong')}
             </span>
           </p>
         )}
@@ -493,18 +526,17 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div className="mt-4 space-y-2.5">
             {zoneList.length === 0 ? (
               <p className="rounded-[9px] bg-ink-100 px-3.5 py-3 text-[13px] leading-snug text-ink-600">
-                La livraison n'est pas proposée pour le moment. Choisissez
-                « Je récupère ».
+                {t('carte.pasDeLivraison')}
               </p>
             ) : (
-              <Field label="Votre quartier" hint="Il détermine les frais et le délai">
+              <Field label={t('carte.votreQuartier')} hint={t('carte.quartierAide')}>
                 <div className="grid gap-1.5 sm:grid-cols-2">
                   {zoneList.map((z) => (
                     <button
                       key={z.id}
                       type="button"
                       onClick={() => setZoneId(z.id)}
-                      className={`rounded-[9px] border px-3 py-2.5 text-left transition-colors ${
+                      className={`rounded-[9px] border px-3 py-2.5 text-start transition-colors ${
                         z.id === zoneId
                           ? 'border-petrol-500 bg-petrol-50'
                           : 'border-ink-200 hover:border-ink-300'
@@ -514,8 +546,9 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
                         {z.name}
                       </span>
                       <span className="num block text-[12px] text-ink-500">
-                        {moneyDT(z.fee)} · ~{z.estimatedMinutes} min
-                        {z.minimumOrder > 0 && ` · min ${moneyDT(z.minimumOrder)}`}
+                        {moneyDT(z.fee)} · ~{z.estimatedMinutes} {t('vitrine.min')}
+                        {z.minimumOrder > 0 &&
+                          ` · ${t('carte.minimum')} ${moneyDT(z.minimumOrder)}`}
                       </span>
                     </button>
                   ))}
@@ -525,16 +558,17 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
 
             {missing > 0 && zone && (
               <p className="rounded-[9px] border border-saffron-500/35 bg-saffron-50 px-3.5 py-2.5 text-[12.5px] leading-snug text-saffron-700">
-                Il manque <span className="num font-bold">{moneyDT(missing)}</span> pour
-                atteindre le minimum de {zone.name}.
+                {t('carte.ilManque')}{' '}
+                <span className="num font-bold">{moneyDT(missing)}</span>{' '}
+                {t('carte.pourMinimum')} {zone.name}.
               </p>
             )}
 
-            <Field label="Adresse de livraison">
+            <Field label={t('carte.adresse')}>
               <Input
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                placeholder="Rue, numéro, étage, repère"
+                placeholder={t('carte.adressePlace')}
               />
             </Field>
             <button
@@ -548,24 +582,24 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
             >
               <Crosshair size={15} />
               {locating
-                ? 'Localisation…'
+                ? t('carte.localisation')
                 : coords
-                  ? 'Position partagée avec le livreur'
-                  : 'Partager ma position GPS'}
+                  ? t('carte.positionPartagee')
+                  : t('carte.partagerPosition')}
             </button>
             <p className="text-[12px] leading-snug text-ink-500">
-              La position aide le livreur à vous trouver et à calculer son trajet.
+              {t('carte.positionAide')}
             </p>
           </div>
         )}
 
         {!user && (
           <div className="mt-4">
-            <Field label="Votre nom" hint="Pour qu'on vous appelle quand c'est prêt">
+            <Field label={t('carte.votreNom2')} hint={t('carte.nomAide')}>
               <Input
                 value={nom}
                 onChange={(e) => setNom(e.target.value)}
-                placeholder="Prénom ou nom"
+                placeholder={t('carte.nomPlace')}
                 autoComplete="name"
               />
             </Field>
@@ -574,8 +608,8 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
 
         <div className="mt-4">
           <Field
-            label="Votre téléphone"
-            hint={user ? "Pour vous prévenir quand c'est prêt" : 'Obligatoire — pour vous joindre si besoin'}
+            label={t('carte.votreTel')}
+            hint={user ? t('carte.telAideCompte') : t('carte.telAideInvite')}
           >
             <Input
               type="tel"
@@ -590,17 +624,17 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
 
         <dl className="mt-5 space-y-1.5 border-t border-ink-100 pt-4 text-[14px]">
           <div className="flex justify-between">
-            <dt className="text-ink-500">Sous-total</dt>
+            <dt className="text-ink-500">{t('carte.sousTotal')}</dt>
             <dd className="num font-semibold">{moneyDT(cart.subtotal())}</dd>
           </div>
           {fee > 0 && (
             <div className="flex justify-between">
-              <dt className="text-ink-500">Livraison</dt>
+              <dt className="text-ink-500">{t('carte.fraisLivraison')}</dt>
               <dd className="num font-semibold">{moneyDT(fee)}</dd>
             </div>
           )}
           <div className="flex items-baseline justify-between pt-1.5">
-            <dt className="text-[15px] font-bold text-ink-900">Total</dt>
+            <dt className="text-[15px] font-bold text-ink-900">{t('carte.total')}</dt>
             <dd className="num text-[20px] font-extrabold text-ink-900">
               {moneyDT(cart.subtotal() + fee)}
             </dd>
@@ -608,8 +642,7 @@ function Checkout({ open, onClose }: { open: boolean; onClose: () => void }) {
         </dl>
 
         <p className="mt-3 rounded-[9px] bg-ink-50 px-3 py-2.5 text-[12.5px] leading-snug text-ink-600">
-          Paiement à la réception. Vous pourrez ajouter un pourboire une fois la commande
-          passée.
+          {t('carte.paiementReception')}
         </p>
       </Modal>
 
@@ -682,6 +715,7 @@ function AccountGate({
 }) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
+  const t = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   const setUser = useAuth((s) => s.setUser)
@@ -708,14 +742,14 @@ function AccountGate({
     <Modal
       open={open}
       onClose={onClose}
-      title="Vos coordonnées"
-      description="Pour vous prévenir quand la commande est prête."
+      title={t('carte.vosCoordonnees')}
+      description={t('carte.nomAide')}
     >
       <form onSubmit={submit} className="space-y-3.5">
-        <Field label="Nom">
+        <Field label={t('carte.nom')}>
           <Input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
         </Field>
-        <Field label="Téléphone" error={error}>
+        <Field label={t('carte.telephone')} error={error}>
           <Input
             type="tel"
             inputMode="tel"
@@ -725,7 +759,7 @@ function AccountGate({
           />
         </Field>
         <Button type="submit" size="lg" className="w-full" loading={busy}>
-          Continuer
+          {t('carte.continuer')}
         </Button>
       </form>
     </Modal>

@@ -91,11 +91,54 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Les montants et numéros s'alignent en colonne : chasse fixe */
+  /**
+   * L'arabe a sa propre fonte, et la typographie latine ne bouge pas.
+   *
+   * Figtree ne porte aucun glyphe arabe : sans cette regle, le
+   * navigateur retombe sur une fonte au hasard, souvent trop fine a
+   * cote du reste. On nomme donc une pile de fontes **systeme** — rien
+   * a telecharger, rien a attendre, et chaque appareil rend l'arabe
+   * avec ce qu'il fait de mieux.
+   *
+   * Les chiffres restent occidentaux : c'est ainsi qu'on ecrit les prix
+   * en Tunisie, et `.num` garde sa chasse fixe pour que les montants
+   * s'alignent en colonne quelle que soit la langue.
+   */
+  :lang(ar) {
+    font-family: 'Noto Sans Arabic', 'Geeza Pro', 'Segoe UI', Tahoma,
+      ui-sans-serif, system-ui, sans-serif;
+    /* L'arabe a besoin d'un peu d'air entre les lignes : ses hampes et
+       ses jambages descendent plus bas que ceux de l'alphabet latin. */
+    line-height: 1.75;
+  }
+
+  /**
+   * Les montants et numéros s'alignent en colonne : chasse fixe.
+   *
+   * Et ils se lisent toujours de gauche à droite, même sur une page
+   * retournée. Sans cette isolation, « 8,50 DT » devient « DT 8,50 »
+   * en arabe : l'algorithme bidi du navigateur réordonne les deux
+   * morceaux, parce qu'il n'a aucun moyen de savoir que la monnaie
+   * appartient au nombre. Un prix affiché à l'envers, ça se discute au
+   * comptoir — et ça se discute avec le caissier.
+   */
   .num {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+
+  /**
+   * Un texte dont on ne connaît pas la langue — le nom d'un plat que le
+   * gérant n'a pas traduit, une adresse, une note de cuisine — s'aligne
+   * d'après ce qu'il contient, pas d'après la page. Sans cela, une
+   * description française sur une carte arabe se tronque par la gauche
+   * et affiche ses points de suspension devant le premier mot.
+   */
+  .texte-auto {
+    unicode-bidi: plaintext;
   }
 
   /* Chiffres alignés même en Figtree */
@@ -176,6 +219,22 @@
 .ticket .t-center {
   text-align: center;
 }
+/* Le logo du ticket.
+   Large mais borne : au-dela de la moitie de la hauteur utile, il
+   repousse les lignes qui comptent — le numero, les plats, le total —
+   et le client repart avec une belle image et pas son recapitulatif.
+   `image-rendering: pixelated` empeche le navigateur de relisser le
+   noir et blanc qu'on vient justement de trancher. */
+.ticket .t-logo {
+  display: block;
+  margin: 0 auto 6px;
+  max-width: 54mm;
+  max-height: 22mm;
+  width: auto;
+  height: auto;
+  image-rendering: pixelated;
+}
+
 .ticket .t-title {
   font-size: 15pt;
   font-weight: 600;
@@ -397,6 +456,15 @@
   }
   .emoji-flotte { animation: flotte 3.2s ease-in-out infinite; }
 
+  /* La meme respiration, mais pour une carte : pas de rotation, une
+     amplitude en pixels plutot qu'en pourcentage, et plus lente. Un
+     bloc de texte qui pivote, meme de trois degres, se lit mal. */
+  @keyframes respire {
+    0%, 100% { transform: translate3d(0, 0, 0); }
+    50%      { transform: translate3d(0, -7px, 0); }
+  }
+  .carte-respire { animation: respire 4.5s ease-in-out infinite; }
+
   @keyframes bat {
     0%, 100% { transform: scale(1); }
     15%      { transform: scale(1.18); }
@@ -476,6 +544,7 @@
   .emoji-flotte,
   .emoji-bat,
   .emoji-tourne,
+  .carte-respire,
   .anim-appelle,
   .animate-sweep,
   .anim-halo::after {
@@ -521,4 +590,22 @@
 
 @media (prefers-reduced-motion: reduce) {
   .anim-panneau { animation: voile 180ms ease both !important; }
+}
+
+@layer utilities {
+  /* L'invitation à installer monte depuis le bas avec un léger
+     dépassement. C'est le seul endroit de l'application où le rebond
+     est permis : elle n'apparaît qu'une fois, après que le client a
+     montré son intérêt. Un rebond sur un geste répété trois cents fois
+     par service serait insupportable ; ici il se remarque, et c'est
+     exactement ce qu'on lui demande. */
+  @keyframes pop {
+    from { opacity: 0; transform: translate3d(0, 110%, 0) scale(0.94); }
+    to   { opacity: 1; transform: none; }
+  }
+  .anim-pop { animation: pop 420ms var(--ease-ressort) both; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-pop { animation: voile 200ms ease both !important; }
 }

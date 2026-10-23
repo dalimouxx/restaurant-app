@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { LogOut, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useAuth } from '../lib/store'
+import { useReglages } from '../lib/reglages'
 import { roleLabel } from '../lib/format'
 import { ConnectionDot } from './ConnectionDot'
 
@@ -45,7 +46,7 @@ export function Shell({
       {/* Rail — grand écran */}
       <aside className="dark-surface sticky top-0 hidden h-dvh w-[232px] shrink-0 flex-col bg-ink-900 lg:flex">
         <div className="px-5 pt-5 pb-6">
-          <Wordmark />
+          <Enseigne />
         </div>
 
         <nav className="flex-1 space-y-0.5 px-3">
@@ -161,6 +162,36 @@ export function Shell({
           </NavLink>
         ))}
       </nav>
+    </div>
+  )
+}
+
+/**
+ * L'enseigne de l'établissement sur lequel ce poste travaille.
+ *
+ * Elle remplace le nom du produit, et ce n'est pas décoratif. La
+ * connexion par code cherche dans toute l'installation — au moment où
+ * quelqu'un tape son code, on ne sait pas encore où il travaille. Un
+ * employé de Chez Mohamed qui tape le sien sur la tablette du
+ * Fastfood B obtient donc une session sur SA maison, et voit ses
+ * commandes à lui sur un comptoir qui n'est pas le sien. C'est le bon
+ * comportement, mais sans enseigne à l'écran, rien ne le lui dit.
+ */
+function Enseigne() {
+  const { reglages } = useReglages()
+  const logo = reglages?.etablissement?.logoUrl
+  const nom = reglages?.restaurantName
+
+  if (!logo) return <Wordmark />
+
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="grid size-[26px] shrink-0 place-items-center overflow-hidden rounded-[7px] bg-white">
+        <img src={logo} alt="" className="size-full object-contain p-0.5" />
+      </span>
+      <span className="truncate text-[15px] font-extrabold tracking-[-0.02em] text-white">
+        {nom ?? 'Service'}
+      </span>
     </div>
   )
 }

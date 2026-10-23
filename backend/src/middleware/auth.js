@@ -3,6 +3,60 @@ const { avecRestaurant, surToutelInstallation } = require('../tenant');
 const { etablissementUnique, parRepere } = require('./restaurantPublic');
 
 /**
+ * Session glissante : le jeton se renouvelle tant qu'on travaille.
+ *
+ * Un jeton vit douze heures. Un fastfood ouvert de 11 h a 1 h du matin
+ * a donc un caissier connecte a 11 h dont la session meurt a 23 h —
+ * au coup de feu. Et elle mourait mal : l'ecran restait visuellement
+ * connecte pendant que chaque appel echouait, sans que rien ne dise
+ * quoi faire. Une caisse ouverte, une commande a moitie saisie, et un
+ * caissier qui redemarre la tablette en plein service.
+ *
+ * Passe la moitie de sa vie, le jeton est donc reemis a la volee et
+ * renvoye dans un en-tete. Le navigateur le remplace sans rien
+ * demander, et la session suit la journee de travail.
+ *
+ * **Elle suit l'activite, pas l'horloge.** Une tablette oubliee sur un
+ * comptoir ne renouvelle rien : sans requete, pas de prolongation. Une
+ * tablette volee le soir est hors service au matin, exactement comme
+ * avant. C'est ce qui separe une session glissante d'un jeton eternel.
+ */
+const MOITIE_DE_VIE = 0.5;
+
+function renouvelerSiBesoin(res, payload) {
+  const { iat, exp, ...identite } = payload;
+  if (!exp || !iat) return;
+
+  const duree = exp - iat;
+  const ecoule = Math.floor(Date.now() / 1000) - iat;
+  if (ecoule < duree * MOITIE_DE_VIE) return;
+
+  try {
+    /**
+     * On repart du jeton courant prive de ses dates, plutot que de
+     * reconstruire son contenu champ par champ.
+     *
+     * La premiere version ne recopiait que l'identifiant, le role et
+     * l'etablissement — et perdait `fullName` au passage. Le nom de la
+     * personne disparaissait de l'ecran a la septieme heure de service,
+     * sans que rien n'explique pourquoi. Enumerer les champs a garder,
+     * c'est s'engager a y penser a chaque champ ajoute ; on garde donc
+     * tout, et on ne rejette que ce qui doit etre recalcule — `iat` et
+     * `exp`, ecartes des la destructuration ci-dessus.
+     */
+    const frais = jwt.sign(identite, process.env.JWT_SECRET, {
+      expiresIn: process.env.JWT_EXPIRES_IN || '12h',
+    });
+    res.setHeader('X-Jeton-Renouvele', frais);
+    // Sans cela, un navigateur ne laisse pas le code lire l'en-tete.
+    res.setHeader('Access-Control-Expose-Headers', 'X-Jeton-Renouvele');
+  } catch {
+    // Un renouvellement rate n'est pas une erreur : le jeton courant
+    // vaut encore, et la requete doit aboutir.
+  }
+}
+
+/**
  * Verifie le jeton, puis place la suite de la requete au nom du
  * restaurant de l'utilisateur.
  *
@@ -26,6 +80,8 @@ function requireAuth(req, res, next) {
 
   req.user = payload; // { id, role, restaurantId }
   req.restaurantId = payload.restaurantId || null;
+
+  renouvelerSiBesoin(res, payload);
 
   /**
    * Le super admin peut demander a travailler dans un etablissement

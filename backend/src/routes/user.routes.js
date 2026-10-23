@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const QRCode = require('qrcode');
 const { User } = require('../models');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { restaurantCourant, avecRestaurant } = require('../tenant');
+const { restaurantCourant, avecRestaurant, surToutelInstallation } = require('../tenant');
 
 const router = express.Router();
 
@@ -63,8 +63,19 @@ router.post('/', requireAuth, requireRole('manager', 'admin', 'super_admin'), as
      * Deux employes partageant un code, c'est la connexion qui en choisit
      * un au hasard : les ventes seraient attribuees a la mauvaise personne,
      * et une cloture de caisse deviendrait indefendable.
+     *
+     * **Sur toute l'installation, et pas seulement dans cet
+     * etablissement.** La colonne porte une contrainte d'unicite globale
+     * — elle date de l'epoque ou il n'y avait qu'un restaurant, et elle
+     * a bien fait de rester. Cherche sous cloisonnement, la verification
+     * ne voyait que les employes de la maison : un code deja pris chez le
+     * voisin passait le controle, puis se heurtait a l'index au moment de
+     * l'insertion. Le gerant recevait une erreur de base de donnees a la
+     * place d'une phrase, et n'avait aucun moyen de deviner quoi faire.
      */
-    const taken = await User.findOne({ where: { loginCode: code } });
+    const taken = await surToutelInstallation(() =>
+      User.findOne({ where: { loginCode: code } })
+    );
     if (taken) {
       return res.status(409).json({ error: 'Ce code est deja attribue a un autre employe.' });
     }

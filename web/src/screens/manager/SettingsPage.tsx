@@ -16,6 +16,7 @@ import { DeliveryZonesCard } from './DeliveryZonesCard'
 import { MapTilesCard } from './MapTilesCard'
 import { ServiceCard } from './ServiceCard'
 import { QrCommandeCard } from './QrCommandeCard'
+import { LogoCard } from './LogoCard'
 import { rafraichirReglages } from '../../lib/reglages'
 
 /**
@@ -158,6 +159,17 @@ export default function SettingsPage() {
       />
 
       <DeliveryZonesCard />
+
+      <LogoCard
+        settings={form}
+        onChange={(logoUrl) =>
+          setForm((f) =>
+            f && f.etablissement
+              ? { ...f, etablissement: { ...f.etablissement, logoUrl } }
+              : f,
+          )
+        }
+      />
 
       <QrCommandeCard settings={form} />
 

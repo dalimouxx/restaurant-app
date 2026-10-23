@@ -400,6 +400,7 @@ function ProductEditor({
   const open = target !== null
 
   const [name, setName] = useState('')
+  const [nameAr, setNameAr] = useState('')
   const [price, setPrice] = useState('')
   const [description, setDescription] = useState('')
   const [categoryId, setCategoryId] = useState('')
@@ -415,6 +416,7 @@ function ProductEditor({
   useEffect(() => {
     if (!open) return
     setName(product?.name ?? '')
+    setNameAr(product?.nameAr ?? '')
     setPrice(product ? String(product.price) : '')
     setDescription(product?.description ?? '')
     setCategoryId(product?.categoryId ?? categories[0]?.id ?? '')
@@ -445,6 +447,7 @@ function ProductEditor({
 
     const payload: ProductInput = {
       name: trimmed,
+      nameAr: nameAr.trim() || null,
       price: value,
       categoryId,
       description: description.trim() || null,
@@ -592,6 +595,18 @@ function ProductEditor({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Sandwich thon"
+              />
+            </Field>
+            {/* Facultatif, et dit comme tel : personne ne ressaisira
+                la carte entiere avant d'ouvrir. Vide, la carte arabe
+                garde le nom d'origine, qui se lit tres bien. */}
+            <Field label="Nom en arabe" hint="Facultatif — affiché aux clients qui lisent l'arabe">
+              <Input
+                lang="ar"
+                dir="rtl"
+                value={nameAr}
+                onChange={(e) => setNameAr(e.target.value)}
+                placeholder="سندويش تن"
               />
             </Field>
             <div className="grid grid-cols-2 gap-3">
@@ -1049,6 +1064,7 @@ function CategoryEditor({
   const [busy, setBusy] = useState(false)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [renameAr, setRenameAr] = useState('')
   const { notify } = useToast()
 
   useEffect(() => {
@@ -1123,7 +1139,7 @@ function CategoryEditor({
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       run(
-                        () => catalog.renameCategory(category.id, renameValue),
+                        () => catalog.renameCategory(category.id, renameValue, renameAr),
                         'Catégorie renommée.',
                       ).then(() => setRenaming(null))
                     }
@@ -1131,12 +1147,32 @@ function CategoryEditor({
                   }}
                   className="h-10 flex-1 text-[13.5px]"
                 />
+                {/* L'arabe se saisit la ou se saisit le nom, pas dans un
+                    ecran a part : un gerant qui renomme une categorie est
+                    exactement la personne qui pense a sa traduction. */}
+                <Input
+                  lang="ar"
+                  dir="rtl"
+                  value={renameAr}
+                  onChange={(e) => setRenameAr(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      run(
+                        () => catalog.renameCategory(category.id, renameValue, renameAr),
+                        'Catégorie renommée.',
+                      ).then(() => setRenaming(null))
+                    }
+                    if (e.key === 'Escape') setRenaming(null)
+                  }}
+                  placeholder="بالعربي — اختياري"
+                  className="h-10 flex-1 text-[13.5px]"
+                />
                 <Button
                   size="sm"
                   loading={busy}
                   onClick={() =>
                     run(
-                      () => catalog.renameCategory(category.id, renameValue),
+                      () => catalog.renameCategory(category.id, renameValue, renameAr),
                       'Catégorie renommée.',
                     ).then(() => setRenaming(null))
                   }
@@ -1162,6 +1198,7 @@ function CategoryEditor({
                   onClick={() => {
                     setRenaming(category.id)
                     setRenameValue(category.name)
+                    setRenameAr(category.nameAr ?? '')
                   }}
                 />
                 <Button

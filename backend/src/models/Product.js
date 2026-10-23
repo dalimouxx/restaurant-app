@@ -5,6 +5,18 @@ const Product = sequelize.define('Product', {
   id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   name: { type: DataTypes.STRING, allowNull: false },
   description: { type: DataTypes.TEXT },
+
+  /**
+   * Le nom et la description en arabe, facultatifs.
+   *
+   * Facultatifs, et c'est le point : personne ne ressaisira
+   * soixante-dix-huit plats avant d'ouvrir. Vide, la carte arabe affiche
+   * le nom d'origine — « Makloub » en lettres latines se reconnait mieux
+   * qu'une case vide. Rempli, le client lit sa carte dans sa langue.
+   */
+  nameAr: { type: DataTypes.STRING },
+  descriptionAr: { type: DataTypes.TEXT },
+
   price: { type: DataTypes.FLOAT, allowNull: false },
 
   /**

@@ -202,6 +202,19 @@ const STATEMENTS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS orders_daily_number
      ON orders ("restaurantId", "orderDate", "orderNumber")
      WHERE "orderDate" >= DATE '2026-10-19'`,
+
+  /**
+   * Le nom arabe d'un plat et d'une categorie, facultatif.
+   *
+   * Facultatif est le mot important : un gerant ne va pas ressaisir
+   * soixante-dix-huit plats avant d'ouvrir. Vide, l'ecran affiche le nom
+   * d'origine — un client qui lit l'arabe reconnait « Makloub » ecrit en
+   * latin bien mieux qu'une case vide. Rempli, il voit sa carte dans sa
+   * langue, plat par plat, au rythme du gerant.
+   */
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS "nameAr" VARCHAR(255)`,
+  `ALTER TABLE products ADD COLUMN IF NOT EXISTS "descriptionAr" TEXT`,
+  `ALTER TABLE categories ADD COLUMN IF NOT EXISTS "nameAr" VARCHAR(255)`,
 ];
 
 

@@ -4,10 +4,15 @@ import { QRCodeSVG } from 'qrcode.react'
 import { ArrowLeft, Check, Heart } from 'lucide-react'
 import { delivery, orders } from '../../lib/api'
 import { joinRoom, on } from '../../lib/socket'
-import { moneyDT, orderNo, statusLabel, trackingIndex, trackingSteps } from '../../lib/format'
+import { moneyDT, orderNo, statusLabel, trackingIndex } from '../../lib/format'
+import { etapesSuivi, useT } from '../../lib/traductions'
+import { useLangue } from '../../lib/langue'
+import { SelecteurLangue } from '../../components/SelecteurLangue'
 import type { Order } from '../../lib/types'
+import { useReglages } from '../../lib/reglages'
 import { Button, Card, Skeleton, useToast } from '../../components/ui'
 import { Emoji, EMOJI_ETAT } from '../../components/Emoji'
+import { InstallerPop } from '../../components/InstallerPop'
 import { DeliveryMap } from '../../components/DeliveryMap'
 
 const TIPS = [1, 2, 5]
@@ -19,6 +24,9 @@ export default function TrackingScreen() {
   const [driverPos, setDriverPos] = useState<{ lat: number; lng: number } | null>(null)
   const [tipping, setTipping] = useState(false)
   const { notify } = useToast()
+  const { reglages } = useReglages()
+  const t = useT()
+  const lang = useLangue()
 
   const load = useCallback(async () => {
     try {
@@ -77,19 +85,19 @@ export default function TrackingScreen() {
     return (
       <div className="grid min-h-dvh place-items-center px-5 text-center">
         <div>
-          <p className="text-[17px] font-bold text-ink-900">Commande introuvable</p>
+          <p className="text-[17px] font-bold text-ink-900">{t('suivi.introuvable')}</p>
           <Link
             to="/commander"
             className="mt-3 inline-block text-[14px] font-semibold text-petrol-600"
           >
-            Retour à la carte
+            {t('vitrine.touteLaCarte')}
           </Link>
         </div>
       </div>
     )
   }
 
-  const steps = trackingSteps(order.fulfillmentType)
+  const steps = etapesSuivi(order.fulfillmentType === 'delivery', lang)
   const current = Math.min(trackingIndex(order.status), steps.length - 1)
   const isDelivery = order.fulfillmentType === 'delivery'
   const showQr =
@@ -106,13 +114,17 @@ export default function TrackingScreen() {
         <div className="mx-auto flex h-14 max-w-lg items-center gap-3 px-4">
           <Link
             to="/commander"
-            aria-label="Retour"
-            className="-ml-1 grid size-9 place-items-center rounded-full text-ink-600 hover:bg-ink-100"
+            aria-label={t('suivi.retour')}
+            className="-ms-1 grid size-9 place-items-center rounded-full text-ink-600 hover:bg-ink-100"
           >
-            <ArrowLeft size={19} />
+            {/* La flèche suit le sens de lecture. */}
+            <ArrowLeft size={19} className="rtl:-scale-x-100" />
           </Link>
           <span className="num text-[17px] font-bold text-ink-900">
             {orderNo(order.orderNumber)}
+          </span>
+          <span className="ms-auto">
+            <SelecteurLangue />
           </span>
         </div>
       </header>
@@ -132,7 +144,9 @@ export default function TrackingScreen() {
               key={`${order.status}-texte`}
               className="anim-monte text-[21px] leading-tight font-extrabold tracking-[-0.02em] text-petrol-700"
             >
-              {statusLabel[order.status]}
+              {/* L'étape en cours vient de la liste traduite : `statusLabel`
+                  sert la caisse et la cuisine, qui travaillent en français. */}
+              {steps[Math.min(current, steps.length - 1)] ?? statusLabel[order.status]}
             </p>
           </div>
 
@@ -193,7 +207,7 @@ export default function TrackingScreen() {
         {/* Code de réception */}
         {showQr && order.qrToken && (
           <Card className="p-5 text-center">
-            <p className="text-[15px] font-bold text-ink-900">Code de réception</p>
+            <p className="text-[15px] font-bold text-ink-900">{t('suivi.codeReception')}</p>
             <p className="mt-1 text-[13px] text-ink-500">
               Montrez-le au livreur pour confirmer la remise.
             </p>
@@ -205,7 +219,7 @@ export default function TrackingScreen() {
 
         {/* Détail */}
         <Card className="p-5">
-          <p className="text-[15px] font-bold text-ink-900">Détail</p>
+          <p className="text-[15px] font-bold text-ink-900">{t('suivi.detail')}</p>
           <ul className="mt-3 space-y-2">
             {order.items?.map((it) => {
               const removed = it.customization?.removed ?? []
@@ -242,11 +256,11 @@ export default function TrackingScreen() {
           </ul>
 
           <dl className="mt-4 space-y-1.5 border-t border-ink-100 pt-3.5 text-[14px]">
-            <Line label="Sous-total" value={order.subtotal} />
-            {order.deliveryFee > 0 && <Line label="Livraison" value={order.deliveryFee} />}
-            {order.tipAmount > 0 && <Line label="Pourboire" value={order.tipAmount} />}
+            <Line label={t('carte.sousTotal')} value={order.subtotal} />
+            {order.deliveryFee > 0 && <Line label={t('carte.fraisLivraison')} value={order.deliveryFee} />}
+            {order.tipAmount > 0 && <Line label={t('suivi.pourboireLigne')} value={order.tipAmount} />}
             <div className="flex items-baseline justify-between pt-1.5">
-              <dt className="text-[15px] font-bold text-ink-900">Total</dt>
+              <dt className="text-[15px] font-bold text-ink-900">{t('carte.total')}</dt>
               <dd className="num text-[19px] font-extrabold text-ink-900">
                 {moneyDT(order.totalAmount)}
               </dd>
@@ -265,10 +279,10 @@ export default function TrackingScreen() {
           <Card className="p-5">
             <div className="flex items-center gap-2">
               <Heart size={16} className="text-coral-500" strokeWidth={2.2} />
-              <p className="text-[15px] font-bold text-ink-900">Remercier le livreur</p>
+              <p className="text-[15px] font-bold text-ink-900">{t('suivi.remercier')}</p>
             </div>
             <p className="mt-1 text-[13px] text-ink-500">
-              Le pourboire lui revient en totalité.
+              {t('suivi.pourboireDetail')}
             </p>
             <div className="mt-3 flex gap-2">
               {TIPS.map((t) => (
@@ -286,6 +300,14 @@ export default function TrackingScreen() {
           </Card>
         )}
       </div>
+
+      {/* Le meilleur moment de tous : la commande est passée, le client
+          attend, et il reviendra. Rien n'occupe le bas de cet écran. */}
+      <InstallerPop
+        pret
+        nomRestaurant={reglages?.restaurantName}
+        logoUrl={reglages?.etablissement?.logoUrl}
+      />
     </div>
   )
 }

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { orders } from '../../lib/api'
 import { joinRoom, on } from '../../lib/socket'
-import { elapsed, elapsedMinutes, orderNo } from '../../lib/format'
+import { elapsed, elapsedMinutes, orderNo, vientDeLaVeille } from '../../lib/format'
 import type { Order } from '../../lib/types'
 import { EmptyState, useNow, useToast } from '../../components/ui'
 import { ConnectionDot } from '../../components/ConnectionDot'
@@ -363,8 +363,18 @@ function Ticket({
     >
       <div className="flex items-start justify-between gap-2 px-4 pt-3.5">
         <div>
-          <span className="num text-[26px] leading-none font-bold text-white">
-            {orderNo(order.orderNumber)}
+          <span className="flex items-baseline gap-1.5">
+            <span className="num text-[26px] leading-none font-bold text-white">
+              {orderNo(order.orderNumber)}
+            </span>
+            {/* Les numeros repartent a 1 chaque journee : sans cette
+                mention, le 12 d'hier et le 12 du jour sont le meme
+                ticket a l'oeil nu. */}
+            {vientDeLaVeille(order.orderDate) && (
+              <span className="rounded-[5px] bg-saffron-500/20 px-1.5 py-0.5 text-[10.5px] font-extrabold tracking-[0.04em] text-saffron-400 uppercase">
+                hier
+              </span>
+            )}
           </span>
           <div className={`mt-1.5 flex items-center gap-1.5 ${channel.color}`}>
             <channel.icon size={14} strokeWidth={2.3} />

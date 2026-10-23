@@ -1,5 +1,5 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { Suspense, lazy, type ReactNode } from 'react'
+import { Suspense, lazy, useEffect, type ComponentType, type ReactNode } from 'react'
 import {
   Building2,
   LayoutDashboard,
@@ -16,6 +16,7 @@ import { PrintHost } from './components/PrintHost'
 import { InstallBanner } from './components/InstallBanner'
 import { Shell, type NavItem } from './components/Shell'
 import { useAuth } from './lib/store'
+import { quandLaSessionFinit } from './lib/api'
 import type { Role } from './lib/types'
 import LoginScreen from './screens/LoginScreen'
 import PortalScreen from './screens/PortalScreen'
@@ -31,17 +32,60 @@ import MyOrdersScreen from './screens/customer/MyOrdersScreen'
  * pèsent lourd et ne concernent qu'une minorité d'écrans. Une borne ou une
  * caisse ne doit pas les télécharger pour rien.
  */
-const TrackingScreen = lazy(() => import('./screens/customer/TrackingScreen'))
-const DriverScreen = lazy(() => import('./screens/driver/DriverScreen'))
-const FinancePage = lazy(() => import('./screens/manager/FinancePage'))
-const RestaurantsPage = lazy(() => import('./screens/admin/RestaurantsPage'))
-const StockPage = lazy(() => import('./screens/manager/StockPage'))
-const TeamPage = lazy(() => import('./screens/manager/TeamPage'))
-const CashSessionsPage = lazy(() => import('./screens/manager/CashSessionsPage'))
-const SettingsPage = lazy(() => import('./screens/manager/SettingsPage'))
-const MenuPage = lazy(() => import('./screens/manager/MenuPage'))
-const JournalPage = lazy(() => import('./screens/manager/JournalPage'))
-const BoardScreen = lazy(() => import('./screens/board/BoardScreen'))
+
+/** Combien de fois on a déjà rechargé pour cause de mise à jour. */
+const CLE_RECHARGE = 'service.rechargeApresMaj'
+
+/**
+ * Un écran qui survit à une mise à jour du serveur.
+ *
+ * Chaque déploiement renomme les fichiers de l'application — c'est ce
+ * qui permet au navigateur de les garder en cache sans jamais servir
+ * une version périmée. Mais un client qui avait la page ouverte garde
+ * l'ancienne liste de noms : au moment où il touche « Suivre », le
+ * fichier demandé n'existe plus, et il reçoit un écran blanc. Au milieu
+ * d'une commande.
+ *
+ * On recharge donc la page une fois, ce qui va rechercher la nouvelle
+ * liste et reprend là où il en était. **Une seule fois** : si le
+ * chargement échoue encore, c'est que le réseau est coupé ou le serveur
+ * à terre, et une boucle de rechargements rendrait le téléphone
+ * inutilisable sans rien réparer.
+ */
+function aLaDemande<T extends { default: ComponentType<unknown> }>(
+  charger: () => Promise<T>,
+) {
+  return lazy(() =>
+    charger().catch((err) => {
+      let dejaFait = false
+      try {
+        dejaFait = sessionStorage.getItem(CLE_RECHARGE) === 'oui'
+        sessionStorage.setItem(CLE_RECHARGE, 'oui')
+      } catch {
+        /* navigation privée : on tente quand même, une fois */
+      }
+      if (!dejaFait) {
+        window.location.reload()
+        // La page s'en va : on rend une promesse qui ne se résout pas,
+        // plutôt qu'une erreur qui ferait clignoter un écran mort.
+        return new Promise<T>(() => {})
+      }
+      throw err
+    }),
+  )
+}
+
+const TrackingScreen = aLaDemande(() => import('./screens/customer/TrackingScreen'))
+const DriverScreen = aLaDemande(() => import('./screens/driver/DriverScreen'))
+const FinancePage = aLaDemande(() => import('./screens/manager/FinancePage'))
+const RestaurantsPage = aLaDemande(() => import('./screens/admin/RestaurantsPage'))
+const StockPage = aLaDemande(() => import('./screens/manager/StockPage'))
+const TeamPage = aLaDemande(() => import('./screens/manager/TeamPage'))
+const CashSessionsPage = aLaDemande(() => import('./screens/manager/CashSessionsPage'))
+const SettingsPage = aLaDemande(() => import('./screens/manager/SettingsPage'))
+const MenuPage = aLaDemande(() => import('./screens/manager/MenuPage'))
+const JournalPage = aLaDemande(() => import('./screens/manager/JournalPage'))
+const BoardScreen = aLaDemande(() => import('./screens/board/BoardScreen'))
 
 function Loading() {
   return (
@@ -132,6 +176,19 @@ function ManagerShell({
 }
 
 export default function App() {
+  /*
+   * Quand le serveur refuse le jeton, l'application doit le savoir.
+   *
+   * Effacer le stockage ne suffisait pas : l'ecran restait visuellement
+   * connecte, chaque appel echouait, et rien ne disait quoi faire. Le
+   * `Guard` rend maintenant l'ecran de connexion de lui-meme, qui
+   * explique et remet en selle sans perdre l'adresse en cours.
+   */
+  const deconnecter = useAuth((s) => s.logout)
+  useEffect(() => {
+    quandLaSessionFinit(deconnecter)
+  }, [deconnecter])
+
   return (
     <ToastHost>
       <PrintHost>

@@ -10,10 +10,15 @@ import { Wordmark } from '../../components/Shell'
 import { Emoji, emojiPlat, emojiPour } from '../../components/Emoji'
 import { useReglages } from '../../lib/reglages'
 import { LineOptions, OptionPicker } from '../../components/OptionPicker'
+import { SelecteurLangue } from '../../components/SelecteurLangue'
+import { useT, nomTraduit } from '../../lib/traductions'
+import { useLangue } from '../../lib/langue'
 
 type Stage = 'ordering' | 'done'
 
 export default function KioskScreen() {
+  const t = useT()
+  const lang = useLangue()
   const [categories, setCategories] = useState<Category[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [activeCat, setActiveCat] = useState<string | null>(null)
@@ -93,14 +98,20 @@ export default function KioskScreen() {
       {/* Menu */}
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="shrink-0 px-6 pt-6 pb-4 sm:px-10 sm:pt-10">
-          <Wordmark dark={false} />
+          <div className="flex items-center justify-between gap-4">
+            <Wordmark dark={false} />
+            {/* Grand, parce qu'on le touche debout, a bout de bras, et
+                qu'il doit se voir sans etre cherche : c'est la premiere
+                chose que fait quelqu'un qui ne lit pas le francais. */}
+            <SelecteurLangue taille="grande" />
+          </div>
           <h1 className="anim-monte mt-5 flex flex-wrap items-center gap-3 text-[30px] leading-[1.15] font-extrabold tracking-[-0.025em] text-ink-900 sm:text-[38px]">
-            Composez votre commande
+            {t('borne.titre')}
             <Emoji vie="rebondit" className="text-[34px] sm:text-[42px]">🍔</Emoji>
           </h1>
           <p className="mt-1.5 text-[15px] text-ink-500">
-            Touchez un plat pour l'ajouter.{' '}
-            {versCaisse ? 'Vous paierez en caisse.' : 'Vous paierez à la remise.'}
+            {t('borne.consigne')}{' '}
+            {versCaisse ? t('borne.paieCaisse') : t('borne.paieRemise')}
           </p>
         </header>
 
@@ -124,7 +135,7 @@ export default function KioskScreen() {
                     >
                       {emojiPour(c.name)}
                     </Emoji>
-                    {c.name}
+                    {nomTraduit(c, lang)}
                   </button>
                 ))}
           </div>
@@ -140,7 +151,7 @@ export default function KioskScreen() {
           ) : visible.length === 0 ? (
             <EmptyState
               icon={UtensilsCrossed}
-              title="Rien dans cette catégorie"
+              title={t('carte.rienIci')}
               description="Choisissez une autre catégorie ci-dessus."
             />
           ) : (
@@ -168,7 +179,7 @@ export default function KioskScreen() {
       {/* Panier */}
       <aside className="flex max-h-[52dvh] shrink-0 flex-col border-t border-ink-200 bg-white lg:max-h-none lg:w-[380px] lg:border-t-0 lg:border-l">
         <div className="flex shrink-0 items-center justify-between border-b border-ink-100 px-5 py-4">
-          <h2 className="text-[16px] font-bold text-ink-900">Votre commande</h2>
+          <h2 className="text-[16px] font-bold text-ink-900">{t('borne.votreCommande')}</h2>
           {cart.lines.length > 0 && (
             <button
               onClick={cart.clear}
@@ -184,8 +195,8 @@ export default function KioskScreen() {
           {cart.lines.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-10 text-center">
               <Emoji vie="flotte" className="text-[44px]">🛒</Emoji>
-              <p className="text-[15px] font-bold text-ink-700">Panier vide</p>
-              <p className="text-[13px] text-ink-500">Vos plats apparaîtront ici.</p>
+              <p className="text-[15px] font-bold text-ink-700">{t('borne.panierVide')}</p>
+              <p className="text-[13px] text-ink-500">{t('borne.panierVideAide')}</p>
             </div>
           ) : (
             <ul className="divide-y divide-ink-100">
@@ -196,7 +207,7 @@ export default function KioskScreen() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14.5px] font-semibold text-ink-900">
-                      {line.product.name}
+                      {nomTraduit(line.product, lang)}
                     </p>
                     <LineOptions options={line.options} />
                     <p className="num mt-0.5 text-[13px] text-ink-500">
@@ -206,7 +217,7 @@ export default function KioskScreen() {
                   <div className="flex items-center gap-1 rounded-full border border-ink-200 p-0.5">
                     <button
                       onClick={() => cart.decrement(i)}
-                      aria-label="Retirer un"
+                      aria-label={t('carte.retirerUn')}
                       className="reagit-fort grid size-9 place-items-center rounded-full text-ink-600 transition-colors hover:bg-ink-100"
                     >
                       <Minus size={15} strokeWidth={2.4} />
@@ -216,7 +227,7 @@ export default function KioskScreen() {
                     </span>
                     <button
                       onClick={() => cart.increment(i)}
-                      aria-label="Ajouter un"
+                      aria-label={t('carte.ajouterUn')}
                       className="reagit-fort grid size-9 place-items-center rounded-full text-ink-600 transition-colors hover:bg-ink-100"
                     >
                       <Plus size={15} strokeWidth={2.4} />
@@ -236,8 +247,8 @@ export default function KioskScreen() {
             <div className="mb-4 grid grid-cols-2 gap-2">
               {(
                 [
-                  ['dine_in', 'Sur place'],
-                  ['pickup', 'À emporter'],
+                  ['dine_in', t('borne.surPlace')],
+                  ['pickup', t('borne.aEmporter')],
                 ] as const
               ).map(([value, label]) => (
                 <button
@@ -258,7 +269,7 @@ export default function KioskScreen() {
             </div>
 
             <div className="mb-4 flex items-baseline justify-between">
-              <span className="text-[15px] font-semibold text-ink-600">Total</span>
+              <span className="text-[15px] font-semibold text-ink-600">{t('carte.total')}</span>
               <span
                 key={cart.subtotal()}
                 className="anim-surgit num text-[26px] font-extrabold tracking-[-0.02em] text-ink-900"
@@ -301,7 +312,12 @@ function ProductTile({
   categorie?: string
   onAdd: () => void
 }) {
+  const t = useT()
+  const lang = useLangue()
   const out = !product.isAvailable
+  const nom = nomTraduit(product, lang)
+  const descriptif =
+    lang === 'ar' ? product.descriptionAr || product.description : product.description
   return (
     /*
      * `transition-all` a disparu : il animait aussi la position et la
@@ -313,7 +329,7 @@ function ProductTile({
     <button
       onClick={onAdd}
       disabled={out}
-      className={`reagit group flex flex-col overflow-hidden rounded-[18px] border bg-white text-left ${
+      className={`reagit group flex flex-col overflow-hidden rounded-[18px] border bg-white text-start ${
         out
           ? 'cursor-not-allowed border-ink-200 opacity-55'
           : 'leve border-ink-200 [transition:border-color_180ms_var(--ease-sortie),box-shadow_180ms_var(--ease-sortie),transform_130ms_var(--ease-sortie)] hover:border-petrol-400 hover:shadow-[0_10px_28px_-10px_rgba(11,107,91,0.45)]'
@@ -336,15 +352,15 @@ function ProductTile({
         )}
         {out && (
           <div className="absolute inset-x-0 bottom-0 bg-ink-900/85 py-1.5 text-center text-[12.5px] font-bold text-white">
-            Épuisé
+            {t('carte.epuise')}
           </div>
         )}
       </div>
       <div className="flex flex-1 flex-col p-3.5">
-        <p className="text-[15px] leading-snug font-bold text-ink-900">{product.name}</p>
-        {product.description && (
-          <p className="mt-1 line-clamp-2 text-[12.5px] leading-snug text-ink-500">
-            {product.description}
+        <p className="texte-auto text-[15px] leading-snug font-bold text-ink-900">{nom}</p>
+        {descriptif && (
+          <p className="texte-auto mt-1 line-clamp-2 text-[12.5px] leading-snug text-ink-500">
+            {descriptif}
           </p>
         )}
         <div className="mt-auto flex items-center justify-between pt-3">
@@ -371,6 +387,7 @@ function KioskDone({
   versCaisse: boolean
   onRestart: () => void
 }) {
+  const t = useT()
   const [left, setLeft] = useState(15)
 
   useEffect(() => {
@@ -390,12 +407,12 @@ function KioskDone({
         <Emoji vie="rebondit" retard={320} className="text-[40px]">🥤</Emoji>
       </div>
       <p className="anim-monte mt-5 text-[17px] font-semibold text-ink-400">
-        Commande enregistrée
+        {t('borne.enregistree')}
       </p>
       <p className="anim-monte mt-2 max-w-md text-[26px] leading-tight font-bold text-white sm:text-[32px]">
         {/* Promettre un comptoir qui n'est pas tenu envoie le client
             attendre devant une caisse vide. */}
-        {versCaisse ? 'Présentez ce numéro en caisse' : 'Gardez ce numéro'}
+        {versCaisse ? t('borne.presentezEnCaisse') : t('borne.gardezCeNumero')}
       </p>
 
       <div className="anim-surgit mt-10 rounded-[26px] bg-white px-14 py-8 shadow-[0_24px_60px_-20px_rgba(11,107,91,0.6)]">
@@ -406,15 +423,15 @@ function KioskDone({
 
       <p className="mt-10 text-[14px] text-ink-500">
         {versCaisse
-          ? 'Votre préparation démarre dès le paiement.'
-          : 'Votre préparation a déjà commencé.'}
+          ? t('borne.demarreApresPaiement')
+          : t('borne.dejaCommencee')}
       </p>
 
       <button
         onClick={onRestart}
         className="reagit mt-8 text-[14px] font-semibold text-ink-400 underline-offset-4 transition-colors hover:text-white hover:underline"
       >
-        Nouvelle commande ({left})
+        {t('borne.nouvelleCommande')} ({left})
       </button>
     </div>
   )

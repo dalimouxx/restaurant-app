@@ -42,6 +42,11 @@ function businessDay(date = new Date()) {
  * (journee, numero) rend cela impossible, et l'appelant retente si deux
  * commandes se croisent.
  */
+/** La journee commerciale precedente, au fuseau du restaurant. */
+function veille() {
+  return businessDay(new Date(Date.now() - 24 * 60 * 60 * 1000));
+}
+
 /**
  * Ce qui doit rester a l'ecran du service en cours.
  *
@@ -52,17 +57,48 @@ function businessDay(date = new Date()) {
  * voit alors deux « 107 » cote a cote, et il n'a aucun moyen de savoir
  * lequel est le sien.
  *
- * On garde la journee de service en cours, plus tout ce qui a ete pris
- * dans les six dernieres heures : une commande passee a 23 h 50 doit
- * rester visible apres minuit, alors que sa journee de service, elle,
- * a change.
+ * On garde donc toute la journee en cours, plus la seule fin de service
+ * de la veille : une commande passee a 23 h 50 doit rester visible
+ * apres minuit, alors que sa journee de service, elle, a change.
+ *
+ * **Il faut les deux bornes, et deux versions s'y sont cassees.**
+ *
+ * La premiere retenait tout ce qui datait de moins de six heures, sans
+ * borne de journee. A quatre heures du matin, elle rattrapait des
+ * tickets d'une journee deja close dont les numeros avaient entre-temps
+ * ete reattribues : elle reconstituait exactement le doublon qu'elle
+ * devait empecher.
+ *
+ * La seconde bornait par journee commerciale — aujourd'hui et la veille
+ * — sans borne d'heure. Elle ramenait alors la veille en entier, midi
+ * compris : six cents tickets impayes d'un service termine depuis
+ * seize heures, devant le caissier.
+ *
+ * La regle juste est la conjonction : la veille ne compte que par sa
+ * queue, celle qui vient de franchir minuit. Au plus deux series de
+ * numeros, dont la plus ancienne n'est qu'un reliquat de quelques
+ * heures.
+ *
+ * Deux series peuvent encore se croiser — le 12 d'hier et le 12
+ * d'aujourd'hui. Ce n'est plus un probleme d'affichage mais de
+ * lisibilite, et c'est traite la ou il se voit : chaque ticket porte sa
+ * journee, et l'ecran marque « hier » sur ceux qui n'appartiennent pas
+ * au service du jour. Masquer le plus ancien serait pire — le plat,
+ * lui, est bien reel.
  */
+const REPORT_MS = 6 * 60 * 60 * 1000;
+
 function fenetreDuService() {
-  const ilYASixHeures = new Date(Date.now() - 6 * 60 * 60 * 1000);
+  const debutDuReport = new Date(Date.now() - REPORT_MS);
   return {
     [Op.or]: [
       { orderDate: businessDay() },
-      { createdAt: { [Op.gte]: ilYASixHeures } },
+      {
+        [Op.and]: [
+          { orderDate: veille() },
+          { createdAt: { [Op.gte]: debutDuReport } },
+        ],
+      },
     ],
   };
 }

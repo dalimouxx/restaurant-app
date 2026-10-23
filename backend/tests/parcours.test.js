@@ -161,10 +161,16 @@ async function run() {
   /* Meme regle qu'en cuisine : un caissier qui voit deux « 42 » dans sa
      file n'a aucun moyen de savoir lequel est celui du client plante
      devant lui. */
-  const numerosCaisse = fileDeCaisse.map((o) => o.orderNumber);
+  const couplesCaisse = fileDeCaisse.map(
+    (o) => `${String(o.orderDate).slice(0, 10)}#${o.orderNumber}`
+  );
   check(
-    numerosCaisse.length === new Set(numerosCaisse).size,
-    'Aucun numero en double dans la file de la caisse'
+    couplesCaisse.length === new Set(couplesCaisse).size,
+    'Deux commandes ne sont jamais la meme dans la file de la caisse'
+  );
+  check(
+    new Set(fileDeCaisse.map((o) => String(o.orderDate).slice(0, 10))).size <= 2,
+    'Et la file ne couvre pas plus de deux journees'
   );
 
   // La cuisine la termine, la salle l'appelle.
@@ -220,16 +226,31 @@ async function run() {
     'Et la cuisine ne la voit pas encore'
   );
 
-  /* Les numeros repartent a 1 chaque jour : un ticket jamais termine la
-     veille porterait le meme numero qu'un ticket du jour, et le
-     cuisinier verrait deux fois le meme sans pouvoir les distinguer. */
-  const numeros = fileCuisine.map((o) => o.orderNumber);
-  const doublons = numeros.filter((n, i) => numeros.indexOf(n) !== i);
+  /* Les numeros repartent a 1 chaque journee commerciale : un ticket
+     jamais termine la veille porte le meme numero qu'un ticket du jour.
+     Ce qui compte n'est pas qu'il disparaisse — le plat est bien reel —
+     mais que le cuisinier puisse les distinguer. Deux regles, donc : la
+     file ne couvre jamais plus de deux journees, et chaque ticket porte
+     la sienne. */
+  const journees = new Set(fileCuisine.map((o) => String(o.orderDate).slice(0, 10)));
+  check(
+    journees.size <= 2,
+    `La file de cuisine ne couvre pas plus de deux journees (${[...journees].join(', ') || 'aucune'})`
+  );
+
+  const porteSaJournee = fileCuisine.every((o) => !!o.orderDate);
+  check(
+    porteSaJournee,
+    'Chaque ticket porte sa journee : c\'est elle qui distingue deux memes numeros'
+  );
+
+  const couples = fileCuisine.map((o) => `${String(o.orderDate).slice(0, 10)}#${o.orderNumber}`);
+  const doublons = couples.filter((c, i) => couples.indexOf(c) !== i);
   check(
     doublons.length === 0,
     doublons.length === 0
-      ? 'Aucun numero en double sur l\'ecran de cuisine'
-      : `Numeros en double a l'ecran : ${[...new Set(doublons)].join(', ')}`
+      ? 'Et deux tickets ne sont jamais le meme'
+      : `Tickets identiques a l'ecran : ${[...new Set(doublons)].join(', ')}`
   );
   await client2.close();
 

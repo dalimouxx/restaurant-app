@@ -13,24 +13,46 @@ set -u
 
 cd "$(dirname "$0")/.." || exit 1
 
-SERIES=(integration options settings menu deroule cancel service caisse cuisine gestion delivery-race e2e-delivery web-contract securite multi-restaurant parcours)
+SERIES=(integration options settings menu deroule cancel service caisse cuisine gestion delivery-race e2e-delivery web-contract securite multi-restaurant identites arabe session deploiement parcours)
 LOGS=$(mktemp -d)
 total_ok=0
 total_ko=0
 echecs=()
 
+# On attend que le port se libere vraiment, et non une seconde au hasard.
+#
+# Un serveur qui garde des connexions ouvertes met parfois plus de temps a
+# rendre le port. Le nouveau echouait alors silencieusement sur EADDRINUSE
+# pendant que l'ancien, moribond, continuait de repondre a /health : la
+# serie tournait contre un serveur en train de s'eteindre et cassait au
+# milieu, avec des echecs qui n'avaient aucun rapport avec son sujet. On a
+# perdu une soiree a chercher le defaut dans l'annulation de commande.
 arreter_serveur() {
   for p in $(pgrep -f "src/server.js" 2>/dev/null); do
     cmd=$(tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null)
     case "$cmd" in node*) kill "$p" 2>/dev/null;; esac
   done
+  for _ in $(seq 1 20); do
+    curl -sf -m 1 http://localhost:4000/health > /dev/null 2>&1 || return 0
+    sleep 0.5
+  done
+  # Il s'accroche : on insiste, puis on laisse le demarrage trancher.
+  pkill -9 -f "src/server.js" 2>/dev/null
   sleep 1
 }
 
 demarrer_serveur() {
   node src/server.js > "$LOGS/serveur.log" 2>&1 &
+  local pid=$!
   for _ in $(seq 1 25); do
-    if curl -sf http://localhost:4000/health > /dev/null 2>&1; then return 0; fi
+    # Il ne suffit pas qu'un serveur reponde : il faut que ce soit
+    # celui-ci. `demarreDepuisS` le dit, et c'est pour cela qu'il existe.
+    if kill -0 "$pid" 2>/dev/null &&
+       curl -sf -m 2 http://localhost:4000/health 2>/dev/null |
+         grep -qE '"demarreDepuisS":[0-9]{1,2}[,}]'; then
+      return 0
+    fi
+    kill -0 "$pid" 2>/dev/null || break
     sleep 1
   done
   echo "  Le serveur n'a pas demarre. Journal :"

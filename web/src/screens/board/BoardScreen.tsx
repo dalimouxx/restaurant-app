@@ -5,6 +5,7 @@ import { joinRoom, on } from '../../lib/socket'
 import type { BoardEntry, Settings } from '../../lib/types'
 import { Wordmark } from '../../components/Shell'
 import { Emoji } from '../../components/Emoji'
+import { traduire } from '../../lib/traductions'
 
 /**
  * Écran mural des commandes prêtes.
@@ -107,8 +108,18 @@ export default function BoardScreen() {
   return (
     <div className="dark-surface flex min-h-dvh flex-col bg-ink-900">
       <header className="flex items-center justify-between gap-4 border-b border-ink-800 px-8 py-5">
-        <div className="flex items-baseline gap-5">
-          <Wordmark />
+        <div className="flex items-center gap-5">
+          {settings?.etablissement?.logoUrl ? (
+            <span className="grid h-12 w-auto min-w-12 place-items-center overflow-hidden rounded-[11px] bg-white px-1.5">
+              <img
+                src={settings.etablissement.logoUrl}
+                alt=""
+                className="max-h-10 w-auto max-w-[140px] object-contain"
+              />
+            </span>
+          ) : (
+            <Wordmark />
+          )}
           <span className="text-[18px] font-semibold text-ink-500">
             {settings?.restaurantName}
           </span>
@@ -125,9 +136,18 @@ export default function BoardScreen() {
       <main className="grid flex-1 grid-cols-1 lg:grid-cols-[1fr_1.4fr]">
         {/* En préparation */}
         <section className="border-ink-800 p-8 lg:border-r">
+          {/* Bilingue, et sans sélecteur : l'écran est au mur, lu en
+              même temps par des clients qui lisent le français et par
+              d'autres qui lisent l'arabe. Personne ne viendra toucher
+              un bouton sur un mur, et choisir une langue reviendrait à
+              laisser la moitié de la salle devant un écran qu'elle ne
+              lit pas. Les libellés sont courts : les deux tiennent. */}
           <h2 className="mb-6 flex items-center gap-2.5 text-[22px] font-bold tracking-[-0.01em] text-ink-500">
             <Emoji vie="bat" className="text-[24px]">🔥</Emoji>
             En préparation
+            <span lang="ar" dir="rtl" className="text-ink-600">
+              · {traduire('suivi.preparation', 'ar')}
+            </span>
           </h2>
           {cooking.length === 0 ? (
             <p className="text-[18px] text-ink-700">—</p>
@@ -151,11 +171,17 @@ export default function BoardScreen() {
           <h2 className="mb-6 flex items-center gap-2.5 text-[22px] font-bold tracking-[-0.01em] text-petrol-400">
             <Emoji vie="rebondit" className="text-[24px]">🛎️</Emoji>
             Prêtes
+            <span lang="ar" dir="rtl" className="text-petrol-500">
+              · {traduire('salle.pretes', 'ar')}
+            </span>
           </h2>
           {ready.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-4 pb-20 text-ink-700">
               <Emoji vie="flotte" className="text-[64px]">🍔</Emoji>
               <p className="text-[20px]">Aucune commande prête</p>
+              <p lang="ar" dir="rtl" className="text-[20px]">
+                {traduire('salle.aucunePrete', 'ar')}
+              </p>
             </div>
           ) : (
             <div className="flex flex-wrap gap-5">
@@ -178,6 +204,9 @@ export default function BoardScreen() {
 
       <footer className="border-t border-ink-800 px-8 py-4 text-center text-[17px] text-ink-600">
         Votre numéro s'affiche en vert quand votre commande est prête
+        <span lang="ar" dir="rtl" className="ms-3">
+          · {traduire('salle.consigne', 'ar')}
+        </span>
       </footer>
     </div>
   )
