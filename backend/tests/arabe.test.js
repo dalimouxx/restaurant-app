@@ -218,7 +218,17 @@ async function run() {
 
   /* ───────── Les postes du personnel ───────── */
   console.log('\n— Les postes du personnel —')
+  /* L'espace de travail demande desormais de s'identifier : on s'y
+     presente avec un compte, sinon on ne verra qu'un ecran de
+     connexion — qui ne prouverait rien sur la langue des postes. */
   const poste = await enArabe(navigateur, erreurs, 1280)
+  await poste.addInitScript(
+    ([t, u]) => {
+      localStorage.setItem('service.token', t)
+      localStorage.setItem('service.user', u)
+    },
+    [mgr, JSON.stringify((await api('GET', '/users', null, mgr)).data.find((x) => x.role === 'manager') ?? { role: 'manager' })],
+  )
   await poste.goto(`${BASE}/espace?restaurant=${REPERE}`, { waitUntil: 'networkidle' })
   await poste.waitForTimeout(1800)
 

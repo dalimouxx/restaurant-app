@@ -205,7 +205,27 @@ export default function App() {
             * desormais sous /espace, atteignable par le pied de page.
             */}
           <Route path="/" element={<LandingScreen />} />
-          <Route path="/espace" element={<PortalScreen />} />
+          {/*
+            * L'espace de travail demande de s'identifier.
+            *
+            * Il etait ouvert : n'importe qui tombant sur l'adresse
+            * lisait la liste des postes du restaurant, leurs noms et ce
+            * qu'ils font. Aucune donnee ne fuyait — chaque poste a
+            * toujours eu sa garde — mais on offrait le plan des lieux a
+            * qui passait.
+            *
+            * Un employe s'identifie avec ce qu'il a deja : son code a
+            * quatre chiffres, son badge, ou son mot de passe. Et il ne
+            * voit ensuite que les postes qu'il peut reellement ouvrir.
+            */}
+          <Route
+            path="/espace"
+            element={
+              <Guard allow={['cashier', 'cook', 'driver', ...STAFF_PLUS]}>
+                <PortalScreen />
+              </Guard>
+            }
+          />
 
           {/* Client */}
           <Route path="/commander" element={<CustomerScreen />} />

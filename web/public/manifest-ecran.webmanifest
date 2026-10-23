@@ -4,7 +4,7 @@
   "short_name": "Écran de salle",
   "description": "Gestion de restaurant — poste « Écran de salle »",
   "start_url": "/ecran",
-  "scope": "/",
+  "scope": "/ecran",
   "display": "standalone",
   "orientation": "landscape",
   "background_color": "#101418",

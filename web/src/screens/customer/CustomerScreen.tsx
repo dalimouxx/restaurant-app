@@ -187,12 +187,17 @@ export default function CustomerScreen() {
       </div>
 
       {cart.lines.length > 0 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md">
+        <div className="anim-barre fixed inset-x-0 bottom-0 z-40 border-t border-ink-200 bg-white/95 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-md">
           <div className="mx-auto max-w-3xl">
             <Button size="lg" className="w-full" onClick={() => setCheckout(true)}>
               <ShoppingBag size={18} strokeWidth={2.2} />
-              <span className="flex-1 text-left">
-                Voir le panier ({cart.count()})
+              <span className="flex-1 text-start">
+                {t('carte.voirLePanier')}{' '}
+                {/* La cle force le remontage : sans elle, React reutilise
+                    le meme noeud et l'animation ne rejoue pas. */}
+                <span key={cart.count()} className="anim-compte num inline-block">
+                  ({cart.count()})
+                </span>
               </span>
               <span className="num">{moneyDT(cart.subtotal())}</span>
             </Button>

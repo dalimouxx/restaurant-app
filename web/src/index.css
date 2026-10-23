@@ -619,8 +619,58 @@
     to   { opacity: 1; transform: none; }
   }
   .anim-pop { animation: pop 420ms var(--ease-ressort) both; }
+
+  /**
+   * La barre du panier qui arrive.
+   *
+   * Elle apparaissait d'un coup sous le pouce du client, au moment
+   * precis ou il regardait ailleurs — il venait de toucher un plat en
+   * haut de l'ecran. Elle monte desormais du bas : on comprend d'ou
+   * elle vient, et le regard la suit au lieu de la decouvrir.
+   */
+  @keyframes monte-du-bas {
+    from { transform: translate3d(0, 100%, 0); }
+    to   { transform: none; }
+  }
+  .anim-barre { animation: monte-du-bas 260ms var(--ease-sortie) both; }
+
+  /**
+   * Le compteur du panier qui change.
+   *
+   * C'est la seule confirmation qu'un plat a bien ete ajoute : sur une
+   * borne, le client est debout a cinquante centimetres d'un grand
+   * ecran et son doigt masque la moitie de la tuile qu'il vient de
+   * toucher. Un chiffre qui change sans bouger passe inapercu, et il
+   * touche une deuxieme fois.
+   */
+  @keyframes compte {
+    0%   { transform: scale(1); }
+    40%  { transform: scale(1.28); }
+    100% { transform: scale(1); }
+  }
+  .anim-compte { animation: compte 320ms var(--ease-ressort); }
+
+  /**
+   * Un numero qui passe a « pret », sur l'ecran de salle.
+   *
+   * C'est le seul moment qui compte sur cet ecran : quelqu'un dans la
+   * salle attend exactement celui-la. Il apparaissait simplement dans
+   * l'autre colonne — et se lit de dix metres, donc se manque de dix
+   * metres. Il arrive maintenant en grossissant, une fois, franchement.
+   */
+  @keyframes appel {
+    0%   { opacity: 0; transform: scale(0.72); }
+    55%  { opacity: 1; transform: scale(1.12); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+  .anim-appel { animation: appel 520ms var(--ease-ressort) both; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .anim-pop { animation: voile 200ms ease both !important; }
+  .anim-pop,
+  .anim-barre,
+  .anim-appel { animation: voile 200ms ease both !important; }
+  /* Le compteur ne bouge plus, mais il ne disparait pas non plus :
+     c'est la seule confirmation d'un ajout. */
+  .anim-compte { animation: none !important; }
 }

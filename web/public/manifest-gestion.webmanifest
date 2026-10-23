@@ -4,7 +4,7 @@
   "short_name": "Gestion",
   "description": "Gestion de restaurant — poste « Gestion »",
   "start_url": "/gestion",
-  "scope": "/",
+  "scope": "/gestion",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#ffffff",

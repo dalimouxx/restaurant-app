@@ -156,7 +156,10 @@ export default function BoardScreen() {
               {cooking.map((e) => (
                 <span
                   key={e.orderNumber}
-                  className="num flex items-center gap-2 text-[56px] leading-none font-bold text-ink-600"
+                  /* En preparation : l'arrivee est discrete, a dessein.
+                     Un numero qui entre en cuisine n'interesse personne
+                     dans la salle — seul son depart compte. */
+                  className="anim-surgit num flex items-center gap-2 text-[56px] leading-none font-bold text-ink-600"
                 >
                   <Emoji className="text-[34px]">👨‍🍳</Emoji>
                   {String(e.orderNumber).padStart(3, '0')}
@@ -189,7 +192,17 @@ export default function BoardScreen() {
                 <span
                   key={e.orderNumber}
                   style={{ animationDelay: `${i * 90}ms` }}
-                  className="anim-surgit anim-halo num flex items-center gap-4 rounded-[22px] bg-petrol-600 px-8 py-5 text-[88px] leading-none font-bold text-white"
+                  /**
+                   * L'arrivee se joue en grand, et une seule fois.
+                   *
+                   * C'est le seul moment qui compte sur cet ecran :
+                   * quelqu'un dans la salle attend exactement ce
+                   * numero-la. Il apparaissait d'un coup, discretement
+                   * — et ce qui se lit de dix metres se manque aussi de
+                   * dix metres. Le halo, lui, continue apres : c'est ce
+                   * qui distingue « pret » de « vient d'etre appele ».
+                   */
+                  className="anim-appel anim-halo num flex items-center gap-4 rounded-[22px] bg-petrol-600 px-8 py-5 text-[88px] leading-none font-bold text-white"
                 >
                   {String(e.orderNumber).padStart(3, '0')}
                   <Emoji vie="rebondit" retard={i * 180} className="text-[52px]">

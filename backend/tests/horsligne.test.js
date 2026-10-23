@@ -77,9 +77,19 @@ async function run() {
      quarante commandes par quart d'heure et par adresse, et c'est la
      limite — pas un doublon — qui ferait echouer le controle. */
   const caissier = (await req('POST', '/auth/login-code', { loginCode: '1234' })).data.token
+
+  /**
+   * Huit en meme temps, et non trois.
+   *
+   * Avec trois, la course ne se declenchait qu'une fois sur dix : la
+   * gagnante avait souvent le temps de valider sa transaction avant que
+   * les autres ne cherchent. Le defaut passait donc inapercu neuf
+   * executions sur dix — c'est le pire des cas pour un controle. Huit
+   * tentatives rendent le croisement a peu pres certain.
+   */
   const refCourse = randomUUID()
   const simultanees = await Promise.all(
-    [1, 2, 3].map(() =>
+    Array.from({ length: 8 }, () =>
       req('POST', '/orders/counter', {
         items: ligne, fulfillmentType: 'dine_in', clientRef: refCourse,
       }, caissier)
@@ -88,11 +98,11 @@ async function run() {
   const ids = new Set(simultanees.map((r) => r.data?.id).filter(Boolean))
   check(
     ids.size === 1,
-    `Trois tentatives simultanees ne font qu'une vente (${ids.size} distincte(s))`
+    `Huit tentatives simultanees ne font qu'une vente (${ids.size} distincte(s))`
   )
   check(
     simultanees.every((r) => r.status < 400),
-    'Et aucune ne repart en erreur : le poste n\'a pas a deviner laquelle a gagne'
+    `Et aucune ne repart en erreur : le poste n'a pas a deviner laquelle a gagne (${simultanees.map((r) => r.status).join(' ')})`
   )
 
   /* Une reference mal formee ne doit pas faire perdre la vente. */

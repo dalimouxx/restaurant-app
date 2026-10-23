@@ -9,6 +9,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../lib/store'
+import type { Role } from '../lib/types'
 import { roleLabel } from '../lib/format'
 import { useReglages } from '../lib/reglages'
 import { Wordmark } from '../components/Shell'
@@ -19,15 +20,24 @@ interface Station {
   to: string
   label: string
   description: string
+  /** Qui peut réellement ouvrir ce poste. */
+  pour: Role[]
   icon: LucideIcon
   /** Reconnaissable de loin, et avant d'avoir lu quoi que ce soit. */
   emoji: string
   vie: 'rebondit' | 'fretille' | 'bat' | 'flotte'
 }
 
+/**
+ * L'encadrement voit tout : c'est lui qui depanne un poste quand
+ * personne d'autre n'est la.
+ */
+const ENCADREMENT: Role[] = ['manager', 'admin', 'super_admin']
+
 const STAFF: Station[] = [
   {
     to: '/caisse',
+    pour: ['cashier', ...ENCADREMENT],
     label: 'Caisse',
     description: 'Encaisser et clôturer le service',
     icon: Receipt,
@@ -36,6 +46,7 @@ const STAFF: Station[] = [
   },
   {
     to: '/cuisine',
+    pour: ['cook', ...ENCADREMENT],
     label: 'Cuisine',
     description: 'Suivre les tickets en préparation',
     icon: ChefHat,
@@ -44,6 +55,7 @@ const STAFF: Station[] = [
   },
   {
     to: '/gestion',
+    pour: ENCADREMENT,
     label: 'Gestion',
     description: 'Stock, finances et équipe',
     icon: LayoutDashboard,
@@ -52,6 +64,7 @@ const STAFF: Station[] = [
   },
   {
     to: '/livreur',
+    pour: ['driver', ...ENCADREMENT],
     label: 'Livraison',
     description: 'Prendre et confirmer les courses',
     icon: Bike,
@@ -60,6 +73,7 @@ const STAFF: Station[] = [
   },
   {
     to: '/borne',
+    pour: ['cashier', ...ENCADREMENT],
     label: 'Borne de salle',
     description: 'L\'écran tactile du comptoir',
     icon: Monitor,
@@ -68,6 +82,7 @@ const STAFF: Station[] = [
   },
   {
     to: '/ecran',
+    pour: ['cashier', 'cook', 'driver', ...ENCADREMENT],
     label: 'Écran de salle',
     description: 'Les numéros appelés, au mur',
     icon: Tv,
@@ -83,6 +98,16 @@ const STAFF: Station[] = [
 export default function PortalScreen() {
   const user = useAuth((s) => s.user)
   const { reglages } = useReglages()
+
+  /**
+   * Chacun ne voit que ce qu'il peut ouvrir.
+   *
+   * Afficher à un cuisinier une carte « Gestion » qui le renverra à un
+   * écran de connexion n'est pas de la sécurité — c'est une promesse
+   * qu'on ne tient pas. Les gardes des routes, elles, restent en place :
+   * cette liste est un confort, pas une barrière.
+   */
+  const postes = STAFF.filter((s) => !user || s.pour.includes(user.role))
   const logo = reglages?.etablissement?.logoUrl
   const nom = reglages?.restaurantName
 
@@ -133,7 +158,7 @@ export default function PortalScreen() {
           </div>
 
           <div className="anim-cascade grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {STAFF.map((s, i) => (
+            {postes.map((s, i) => (
               <Link
                 key={s.to}
                 to={s.to}

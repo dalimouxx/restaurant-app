@@ -87,6 +87,50 @@ async function run() {
     await page.close()
   }
 
+  /* ───────── Chaque poste est une application distincte ───────── */
+  console.log('\n— Des applications distinctes, et non une seule —')
+
+  /**
+   * LE POINT QUI MANQUAIT, et qui expliquait le defaut restant.
+   *
+   * Tous les manifestes declaraient la meme portee, « / ». Le navigateur
+   * considerait donc que /gestion appartenait a l'application cliente
+   * deja installee : au lieu d'en installer une nouvelle, il ouvrait
+   * celle-la — et celle-la demarre sur /commander. On installait
+   * « Gestion » et on tombait sur l'ecran client, sans que rien dans le
+   * code paraisse faux.
+   *
+   * Chaque poste du personnel a desormais sa propre portee. La regle du
+   * plus long prefixe fait le reste : /gestion appartient a la gestion,
+   * meme si le client, lui, garde une portee large.
+   */
+  const portees = new Map()
+  for (const [, poste] of POSTES) {
+    const m = await (await fetch(`${BASE}/manifest-${poste}.webmanifest`)).json()
+    portees.set(poste, m.scope)
+  }
+
+  for (const [route, poste, depart] of POSTES) {
+    if (poste === 'client') continue
+    check(
+      portees.get(poste) === route,
+      `${route.padEnd(11)} a sa propre portee (${portees.get(poste)})`
+    )
+    check(
+      depart.startsWith(portees.get(poste)),
+      `${route.padEnd(11)} demarre bien a l'interieur (${depart})`
+    )
+  }
+  check(
+    portees.get('client') === '/',
+    `Le client garde une portee large : il circule de la carte au suivi (${portees.get('client')})`
+  )
+  const distinctes = new Set([...portees.values()])
+  check(
+    distinctes.size === POSTES.length,
+    `Les ${POSTES.length} postes ont ${distinctes.size} portees distinctes`
+  )
+
   /* ───────── Le nom sur l'ecran d'accueil ───────── */
   console.log('\n— Chaque poste porte son nom —')
 
@@ -119,6 +163,50 @@ async function run() {
     localStorage.setItem('service.user', u)
     localStorage.removeItem('service.install.gestion')
   }, [mgr.token, JSON.stringify(mgr.user)])
+
+  /* ───────── L'espace de travail ne s'ouvre pas a tout le monde ───────── */
+  console.log('\n— L\'espace de travail demande de s\'identifier —')
+
+  const visiteur = await navigateur.newPage({ viewport: { width: 1300, height: 900 } })
+  await visiteur.goto(`${BASE}/espace?restaurant=principal`, { waitUntil: 'networkidle' })
+  await visiteur.waitForTimeout(1800)
+  const vuParUnInconnu = await visiteur.evaluate(() => document.body.innerText)
+  check(
+    /connexion|connecter|code/i.test(vuParUnInconnu),
+    'Un inconnu tombe sur une demande d\'identification'
+  )
+  check(
+    !/Encaisser et clôturer|Suivre les tickets/.test(vuParUnInconnu),
+    'Et ne lit pas le plan des lieux : ni les postes, ni ce qu\'ils font'
+  )
+  await visiteur.close()
+
+  /* Un cuisinier ne voit que ce qu'il peut ouvrir. Lui montrer une
+     carte « Gestion » qui le renverra a un ecran de connexion n'est pas
+     de la securite, c'est une promesse qu'on ne tient pas. */
+  const cuisinier = (await (await fetch(BASE + '/api/auth/login-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Restaurant': 'principal' },
+    body: JSON.stringify({ loginCode: '1427' }),
+  })).json())
+  if (cuisinier?.token && cuisinier.user?.role === 'cook') {
+    const cuisine = await navigateur.newPage({ viewport: { width: 1300, height: 900 } })
+    await cuisine.addInitScript(([t, u]) => {
+      localStorage.setItem('service.token', t)
+      localStorage.setItem('service.user', u)
+    }, [cuisinier.token, JSON.stringify(cuisinier.user)])
+    await cuisine.goto(`${BASE}/espace?restaurant=principal`, { waitUntil: 'networkidle' })
+    await cuisine.waitForTimeout(1800)
+    const vuParLeCuisinier = await cuisine.evaluate(() => document.body.innerText)
+    check(/Cuisine/.test(vuParLeCuisinier), 'Un cuisinier voit son poste')
+    check(
+      !/Stock, finances et équipe/.test(vuParLeCuisinier),
+      'Et pas la gestion, qu\'il ne pourrait pas ouvrir'
+    )
+    await cuisine.close()
+  } else {
+    check(true, 'Pas de cuisinier de test : controle du filtrage par role passe')
+  }
 
   await page.goto(`${BASE}/espace?restaurant=principal`, { waitUntil: 'networkidle' })
   await page.waitForTimeout(1500)

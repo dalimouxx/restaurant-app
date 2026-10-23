@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react'
+
 /**
  * Emoji animés.
  *
@@ -26,6 +28,34 @@ const CLASSES: Record<Vie, string> = {
   immobile: '',
 }
 
+/**
+ * Un seul observateur pour toute la page.
+ *
+ * Une carte de soixante-dix plats affichait soixante-dix emoji animés
+ * en boucle — dont la soixantaine qui se trouve hors de l'écran. Mesuré
+ * sur la carte en ligne : cent sept animations infinies tournant en
+ * même temps, sur un téléphone, pendant qu'on fait défiler. C'est de la
+ * batterie brûlée pour un mouvement que personne ne voit, et c'est
+ * précisément ce qui rend un défilement saccadé.
+ *
+ * L'emoji ne s'anime donc que tant qu'il est visible. Un observateur
+ * partagé plutôt qu'un par emoji : soixante-dix observateurs coûteraient
+ * ce qu'on cherche à économiser.
+ */
+const abonnes = new WeakMap<Element, (visible: boolean) => void>()
+
+const observateur =
+  typeof IntersectionObserver === 'undefined'
+    ? null
+    : new IntersectionObserver(
+        (entrees) => {
+          for (const e of entrees) abonnes.get(e.target)?.(e.isIntersecting)
+        },
+        // Une marge : l'emoji est déjà en mouvement quand il arrive,
+        // au lieu de démarrer sous les yeux du client.
+        { rootMargin: '120px' },
+      )
+
 export function Emoji({
   children,
   vie = 'immobile',
@@ -38,10 +68,27 @@ export function Emoji({
   retard?: number
   className?: string
 }) {
+  const noeud = useRef<HTMLSpanElement | null>(null)
+  /* Visible par défaut : sans observateur — navigateur ancien, rendu
+     côté serveur — mieux vaut un emoji qui bouge qu'un emoji figé. */
+  const [envue, setEnvue] = useState(true)
+
+  useEffect(() => {
+    const el = noeud.current
+    if (!el || !observateur || vie === 'immobile') return
+    abonnes.set(el, setEnvue)
+    observateur.observe(el)
+    return () => {
+      observateur.unobserve(el)
+      abonnes.delete(el)
+    }
+  }, [vie])
+
   return (
     <span
+      ref={noeud}
       aria-hidden="true"
-      className={`inline-block ${CLASSES[vie]} ${className}`}
+      className={`inline-block ${envue ? CLASSES[vie] : ''} ${className}`}
       style={retard ? { animationDelay: `${retard}ms` } : undefined}
     >
       {children}

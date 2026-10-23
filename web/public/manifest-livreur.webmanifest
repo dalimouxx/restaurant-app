@@ -4,7 +4,7 @@
   "short_name": "Livreur",
   "description": "Gestion de restaurant — poste « Livreur »",
   "start_url": "/livreur",
-  "scope": "/",
+  "scope": "/livreur",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#101418",

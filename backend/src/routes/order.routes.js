@@ -175,6 +175,22 @@ const DEPART_RESERVE = 300;
  * plus un — sinon une tranche posee a 300 ferait commencer la journee
  * a 331.
  */
+/**
+ * Attendre qu'une tentative parallele ait fini d'enregistrer sa vente.
+ *
+ * Trois essais tres courts plutot qu'une longue attente : si elle est
+ * en vol, elle atterrit en quelques millisecondes ; si elle n'existe
+ * pas, inutile de faire patienter un client au comptoir.
+ */
+async function attendreLaConcurrente(clientRef) {
+  for (const pause of [0, 25, 75]) {
+    if (pause) await new Promise((r) => setTimeout(r, pause));
+    const trouvee = await Order.findOne({ where: { clientRef } });
+    if (trouvee) return trouvee;
+  }
+  return null;
+}
+
 async function getNextOrderNumber(orderDate) {
   const servis = await Order.max('orderNumber', {
     where: { orderDate, ...filtreEtablissement() },
@@ -632,7 +648,7 @@ async function createOrderWithItems(opts) {
         clientRef,
       });
     } catch (err) {
-      if (err.name !== 'SequelizeUniqueConstraintError' || attempt === 5) throw err;
+      if (err.name !== 'SequelizeUniqueConstraintError') throw err;
       /**
        * Deux contraintes uniques peuvent sauter ici, et elles
        * n'appellent pas la meme reponse.
@@ -640,15 +656,27 @@ async function createOrderWithItems(opts) {
        * Le numero du jour : deux ventes prises dans la meme seconde
        * ont vise le meme. On retente, et la seconde prend le suivant.
        *
-       * La reference de l'envoi : la vente vient d'etre enregistree
-       * par une tentative parallele. Retenter ne ferait que rejouer
-       * le meme echec — on rend celle qui existe, ce que le poste
-       * attendait depuis le debut.
+       * La reference de l'envoi : la vente est en train d'etre
+       * enregistree par une tentative parallele. Retenter ne ferait que
+       * rejouer le meme echec — on rend celle qui existe.
+       *
+       * **Mais elle n'existe pas encore a cet instant precis.** C'est
+       * la que la premiere version se cassait, une fois sur dix : la
+       * gagnante avait pris le verrou sans avoir encore valide sa
+       * transaction, la perdante cherchait, ne trouvait rien, et
+       * repartait creer une vente qui echouerait pareil. Au bout de
+       * cinq tours, le poste recevait une erreur pour une vente qui
+       * etait pourtant bien passee.
+       *
+       * On laisse donc a la gagnante le temps de finir, et on
+       * recommence a chercher. Quelques dizaines de millisecondes
+       * suffisent ; au-dela, c'est que l'echec venait d'ailleurs.
        */
       if (clientRef) {
-        const concurrente = await Order.findOne({ where: { clientRef } });
+        const concurrente = await attendreLaConcurrente(clientRef);
         if (concurrente) return getFullOrder(concurrente.id);
       }
+      if (attempt === 5) throw err;
     }
   }
 

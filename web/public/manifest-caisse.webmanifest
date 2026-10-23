@@ -4,7 +4,7 @@
   "short_name": "Caisse",
   "description": "Gestion de restaurant — poste « Caisse »",
   "start_url": "/caisse",
-  "scope": "/",
+  "scope": "/caisse",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#ffffff",

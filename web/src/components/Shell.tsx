@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { LogOut, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useAuth } from '../lib/store'
@@ -35,10 +35,27 @@ export function Shell({
   const user = useAuth((s) => s.user)
   const logout = useAuth((s) => s.logout)
   const navigate = useNavigate()
+  const { pathname } = useLocation()
 
+  /**
+   * Fermer la session laisse le poste chez lui.
+   *
+   * On renvoyait vers la vitrine publique. Deux raisons d'arreter.
+   *
+   * La premiere tient au metier : un caissier qui passe la main en fin
+   * de service laissait son remplacant devant la carte du restaurant,
+   * à lui de retrouver le chemin de la caisse. L'ecran de connexion du
+   * poste est ce qu'il faut — la tablette est prete pour le suivant.
+   *
+   * La seconde tient a l'installation. Chaque poste installe a
+   * desormais sa propre portee : la caisse, c'est `/caisse`. Partir
+   * vers `/` sortait de l'application et ouvrait un onglet de
+   * navigateur par-dessus — on fermait sa session et on se retrouvait
+   * dans Chrome, sans comprendre.
+   */
   const signOut = () => {
     logout()
-    navigate('/', { replace: true })
+    navigate(pathname, { replace: true })
   }
 
   return (
