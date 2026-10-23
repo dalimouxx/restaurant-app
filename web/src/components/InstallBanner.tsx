@@ -1,12 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Share, X } from 'lucide-react'
 import {
   applyManifest,
   estIOS,
   estInstallee,
+  installationAReprendre,
   POSTE_LABELS,
+  inviteDisponible,
+  oublierInvite,
+  posteDuChargement,
   posteFor,
+  rechargerPourInstaller,
+  surInvite,
   type InvitePromptable,
 } from '../lib/install'
 import { Emoji } from './Emoji'
@@ -43,9 +49,11 @@ const DELAI_MS = 2500
 export function InstallBanner() {
   const { pathname } = useLocation()
   const poste = posteFor(pathname)
-  const [invite, setInvite] = useState<InvitePromptable | null>(null)
+  const [invite, setInvite] = useState<InvitePromptable | null>(() => inviteDisponible())
   const [visible, setVisible] = useState(false)
   const [modeIOS, setModeIOS] = useState(false)
+  // Une installation demandée juste avant ce rechargement ?
+  const reprise = useRef(installationAReprendre(poste))
 
   // Le manifeste suit le poste affiché, sur tous les écrans — y compris
   // ceux où ce bandeau ne s'affiche pas : c'est lui qui décide du nom et
@@ -56,9 +64,24 @@ export function InstallBanner() {
 
   const cotePersonnel = poste !== 'client'
 
+  /**
+   * L'invitation captée vaut-elle pour le poste qu'on regarde ?
+   *
+   * Le navigateur décide de ce qu'il installera au chargement de la
+   * page, d'après le manifeste présent à ce moment-là. Un gérant qui
+   * arrivait par la vitrine puis naviguait vers la gestion voyait bien
+   * « Installer Gestion » — et installait l'application cliente. Une
+   * invitation ne vaut donc que pour le poste pour lequel la page a été
+   * chargée ; sinon il faut repasser par son adresse.
+   */
+  const memePoste = posteDuChargement() === poste
+
+  /* L'invitation arrive après coup : on s'abonne plutôt que de
+     l'attendre au montage, qui serait trop tard sur un écran lent. */
+  useEffect(() => surInvite(() => setInvite(inviteDisponible())), [])
+
   useEffect(() => {
-    if (!cotePersonnel) return
-    if (estInstallee()) return
+    if (!cotePersonnel || estInstallee()) return
 
     let refuse = false
     try {
@@ -77,18 +100,29 @@ export function InstallBanner() {
       return () => clearTimeout(t)
     }
 
-    let t: ReturnType<typeof setTimeout> | undefined
-    function onInvite(e: Event) {
-      e.preventDefault()
-      setInvite(e as unknown as InvitePromptable)
-      t = setTimeout(() => setVisible(true), DELAI_MS)
-    }
-    window.addEventListener('beforeinstallprompt', onInvite)
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onInvite)
-      if (t) clearTimeout(t)
-    }
-  }, [poste, cotePersonnel])
+    /**
+     * On ne propose rien sans invitation captée.
+     *
+     * Elle répond à une question qu'on ne peut pas poser autrement : ce
+     * navigateur sait-il installer une application ? Sans elle, le
+     * bouton ne ferait rien — et un bouton qui ne fait rien coûte plus
+     * cher qu'un bouton absent.
+     */
+    if (!invite) return
+
+    // Reprise après rechargement : le gérant vient d'appuyer, la page
+    // est revenue, et plus rien ne se passerait pendant trois secondes.
+    const t = setTimeout(() => setVisible(true), reprise.current ? 0 : DELAI_MS)
+    return () => clearTimeout(t)
+  }, [poste, cotePersonnel, invite])
+
+  /** L'installation reprend d'elle-même après le rechargement. */
+  useEffect(() => {
+    if (!visible || !reprise.current || !memePoste) return
+    reprise.current = false
+    void installer()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, memePoste])
 
   function refuser() {
     setVisible(false)
@@ -100,9 +134,21 @@ export function InstallBanner() {
   }
 
   async function installer() {
+    /**
+     * Le poste ne correspond pas à celui du chargement : on repasse par
+     * son adresse, pour que le navigateur reparte d'une page dont le
+     * manifeste est le bon dès le premier octet. C'est le seul moyen —
+     * il ne revient pas sur sa décision en cours de route.
+     */
+    if (!memePoste) {
+      rechargerPourInstaller(poste)
+      return
+    }
     if (!invite) return
     await invite.prompt()
     const { outcome } = await invite.userChoice
+    // Consommée : le navigateur n'en redonne pas sur cette page.
+    oublierInvite()
     if (outcome === 'accepted') setVisible(false)
     else refuser()
   }

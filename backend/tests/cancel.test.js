@@ -186,11 +186,27 @@ async function run() {
   /* ───────── File d'attente bornee ───────── */
   console.log('\n— File d\'attente —')
 
+  /**
+   * La file est bornee par la JOURNEE de service, pas par un nombre
+   * d'heures.
+   *
+   * Douze heures semblaient une borne raisonnable, et c'etait une
+   * erreur : un fastfood ouvert de 11 h a 1 h du matin a une journee de
+   * quatorze heures, et une commande impayee de 11 h 30 appartient
+   * encore au service en cours a minuit. La borne par journee tient
+   * cela, et la carde quand meme : au plus la journee du jour, plus la
+   * fin de service de la veille.
+   */
   const file = await req('GET', '/orders/pending-payment', null, cash)
-  const limite = Date.now() - 12 * 60 * 60 * 1000
+  const journees = new Set(file.data.map((o) => String(o.orderDate).slice(0, 10)))
+  check(
+    journees.size <= 2,
+    `La file ne couvre pas plus de deux journees (${[...journees].join(', ') || 'aucune'})`
+  )
+  const limite = Date.now() - 30 * 60 * 60 * 1000
   check(
     file.data.every((o) => new Date(o.createdAt).getTime() >= limite),
-    'La file ne contient que des commandes des douze dernieres heures'
+    'Et rien n\'y traine au-dela d\'un service et de sa veille'
   )
   check(
     file.data.every((o) => o.status === 'awaiting_payment'),

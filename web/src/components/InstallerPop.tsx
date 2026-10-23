@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Share, Sparkles, X } from 'lucide-react'
-import { estIOS, estInstallee, type InvitePromptable } from '../lib/install'
+import {
+  estIOS,
+  estInstallee,
+  inviteDisponible,
+  oublierInvite,
+  surInvite,
+  type InvitePromptable,
+} from '../lib/install'
 import { Emoji } from './Emoji'
 import { useT } from '../lib/traductions'
 
@@ -68,12 +75,17 @@ export function InstallerPop({
       return
     }
 
-    function surInvite(e: Event) {
-      e.preventDefault()
-      setInvite(e as unknown as InvitePromptable)
-    }
-    window.addEventListener('beforeinstallprompt', surInvite)
-    return () => window.removeEventListener('beforeinstallprompt', surInvite)
+    /**
+     * L'invitation est captée au démarrage de l'application, pas ici.
+     *
+     * `beforeinstallprompt` ne se déclenche qu'une fois par chargement,
+     * et tôt. L'attendre au montage d'un composant, c'est la manquer
+     * dès que l'écran met un peu de temps à s'afficher — et c'est
+     * exactement ce qui arrive sur le téléphone d'un client, en 3G,
+     * devant un comptoir.
+     */
+    setInvite(inviteDisponible())
+    return surInvite(() => setInvite(inviteDisponible()))
   }, [])
 
   // Elle n'apparaît qu'une fois l'intérêt manifesté, et après un court
@@ -100,6 +112,8 @@ export function InstallerPop({
     if (!invite) return
     await invite.prompt()
     const { outcome } = await invite.userChoice
+    // Consommée : le navigateur n'en redonne pas sur cette page.
+    oublierInvite()
     setVisible(false)
     setFerme(true)
     if (outcome !== 'accepted') {

@@ -137,6 +137,23 @@ export default function PortalScreen() {
               <Link
                 key={s.to}
                 to={s.to}
+                /**
+                 * Un vrai chargement de page, et non une navigation
+                 * interne.
+                 *
+                 * Le navigateur decide de ce qu'il installera au
+                 * chargement, d'apres le manifeste present a cet
+                 * instant. Entrer dans la caisse sans recharger, c'est
+                 * y arriver avec le manifeste de la page d'avant — et
+                 * installer « Caisse » posait alors l'application
+                 * cliente.
+                 *
+                 * Le cout est nul la ou il compte : on ouvre son poste
+                 * une fois le matin et on y reste. Un chargement franc
+                 * donne en prime des fichiers a jour et un ecran
+                 * propre.
+                 */
+                reloadDocument
                 className="reagit leve group relative overflow-hidden rounded-[18px] border border-ink-700/70 bg-ink-800/70 p-5 transition-colors hover:border-petrol-600/60 hover:bg-ink-800"
               >
                 {/* L'emoji en fond, grand et discret : il donne a chaque
